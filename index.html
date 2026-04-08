@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 통합 처리기 - 사용 가이드</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 25px 30px;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+        }
+        
+        .section h2 {
+            color: #667eea;
+            font-size: 18px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .feature-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .feature-card h3 {
+            color: #333;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        
+        .feature-card p {
+            color: #666;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        
+        .tips-list {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px 20px;
+            border-radius: 8px;
+        }
+        
+        .tips-list h3 {
+            color: #856404;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        
+        .tips-list ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .tips-list li {
+            color: #856404;
+            font-size: 13px;
+            padding: 5px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+        
+        .tips-list li:before {
+            content: "⚠️";
+            position: absolute;
+            left: 0;
+        }
+        
+        .steps {
+            counter-reset: step-counter;
+        }
+        
+        .step {
+            background: #e3f2fd;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            counter-increment: step-counter;
+            position: relative;
+            padding-left: 45px;
+        }
+        
+        .step:before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #2196F3;
+            color: white;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .step-title {
+            font-weight: bold;
+            color: #1976D2;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        
+        .step-desc {
+            color: #555;
+            font-size: 13px;
+        }
+        
+        /* Google AdSense 영역 */
+        .ad-container {
+            margin: 20px 0;
+            text-align: center;
+            min-height: 90px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        
+        .footer {
+            background: #f8f9fa;
+            padding: 15px 30px;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            border-top: 1px solid #dee2e6;
+        }
+    </style>
+    
+    <!-- Google AdSense 스크립트 -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7499194536528772"
+            crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📄 PDF 통합 처리기</h1>
+            <p>PDF 분할, 병합, 이미지 변환을 한 번에!</p>
+        </div>
+        
+        <div class="content">
+            <!-- 주요 기능 -->
+            <div class="section">
+                <h2>🎯 주요 기능</h2>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h3>✂️ PDF 분할</h3>
+                        <p>PDF 파일을 페이지 범위, 개별 페이지, 또는 페이지 단위로 분할할 수 있습니다.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>🔗 PDF 병합</h3>
+                        <p>여러 PDF 파일과 이미지를 하나의 PDF로 병합할 수 있습니다.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>🖼️ 이미지 변환</h3>
+                        <p>PDF를 PNG, JPG, BMP, TIFF 이미지로 변환할 수 있습니다.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Google AdSense 광고 1 -->
+            <div class="ad-container">
+                <!-- 수평 -->
+                <ins class="adsbygoogle"
+                     style="display:block"
+                     data-ad-client="ca-pub-7499194536528772"
+                     data-ad-slot="5943997057"
+                     data-ad-format="auto"
+                     data-full-width-responsive="true"></ins>
+                <script>
+                     (adsbygoogle = window.adsbygoogle || []).push({});
+                </script>
+            </div>
+            
+            <!-- 사용 방법 -->
+            <div class="section">
+                <h2>📖 사용 방법</h2>
+                
+                <h3 style="color: #333; font-size: 15px; margin: 15px 0 10px 0;">PDF 분할하기</h3>
+                <div class="steps">
+                    <div class="step">
+                        <div class="step-title">PDF 파일 선택</div>
+                        <div class="step-desc">좌측 상단의 "PDF 파일 선택" 버튼을 클릭하거나 파일을 드래그하여 추가</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-title">분할 옵션 선택</div>
+                        <div class="step-desc">페이지 범위, 개별 페이지, 또는 페이지 단위 중 선택</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-title">출력 폴더 지정</div>
+                        <div class="step-desc">분할된 파일이 저장될 폴더를 선택 (기본: 원본 파일 위치)</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-title">분할 실행</div>
+                        <div class="step-desc">"PDF 분할 실행" 버튼을 클릭하여 처리</div>
+                    </div>
+                </div>
+                
+                <h3 style="color: #333; font-size: 15px; margin: 15px 0 10px 0;">PDF 병합하기</h3>
+                <div class="steps">
+                    <div class="step">
+                        <div class="step-title">파일 추가</div>
+                        <div class="step-desc">병합할 PDF 및 이미지 파일을 드래그하거나 "추가" 버튼으로 선택</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-title">순서 조정</div>
+                        <div class="step-desc">↑↓ 버튼으로 파일 순서를 조정</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-title">저장 위치 설정</div>
+                        <div class="step-desc">파일명과 저장 위치를 지정</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-title">병합 실행</div>
+                        <div class="step-desc">"PDF 병합 실행" 버튼을 클릭하여 처리</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Google AdSense 광고 2 -->
+            <div class="ad-container">
+                <!-- 수평 -->
+                <ins class="adsbygoogle"
+                     style="display:block"
+                     data-ad-client="ca-pub-7499194536528772"
+                     data-ad-slot="5943997057"
+                     data-ad-format="auto"
+                     data-full-width-responsive="true"></ins>
+                <script>
+                     (adsbygoogle = window.adsbygoogle || []).push({});
+                </script>
+            </div>
+            
+            <!-- 유의사항 -->
+            <div class="section">
+                <h2>⚠️ PDF 변환 유의사항</h2>
+                <div class="tips-list">
+                    <h3>처리 전 확인사항</h3>
+                    <ul>
+                        <li>암호화된 PDF는 먼저 암호를 해제해야 합니다</li>
+                        <li>대용량 PDF 파일은 처리 시간이 오래 걸릴 수 있습니다</li>
+                        <li>이미지 변환 시 DPI가 높을수록 파일 크기가 커집니다</li>
+                        <li>병합 시 이미지는 자동으로 PDF 페이지 크기에 맞춰집니다</li>
+                        <li>처리 중에는 프로그램을 종료하지 마세요</li>
+                    </ul>
+                </div>
+                
+                <div class="tips-list" style="background: #d1ecf1; border-color: #17a2b8; margin-top: 15px;">
+                    <h3 style="color: #0c5460;">권장 설정</h3>
+                    <ul>
+                        <li style="color: #0c5460;">이미지 변환: 일반 문서는 150 DPI, 고품질은 300 DPI 권장</li>
+                        <li style="color: #0c5460;">병합 시 페이지 크기: A4 세로 방향이 가장 범용적</li>
+                        <li style="color: #0c5460;">파일명 패턴: 날짜와 페이지 번호를 포함하면 관리가 편리</li>
+                        <li style="color: #0c5460;">출력 폴더: 바탕화면이나 문서 폴더 사용 권장</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- 지원 형식 -->
+            <div class="section">
+                <h2>📋 지원 형식</h2>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h3>입력 형식</h3>
+                        <p><strong>PDF:</strong> 모든 버전<br>
+                        <strong>이미지:</strong> PNG, JPG, JPEG, BMP, TIFF, GIF</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>출력 형식</h3>
+                        <p><strong>PDF:</strong> 표준 PDF 1.4+<br>
+                        <strong>이미지:</strong> PNG, JPG, BMP, TIFF</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>해상도 옵션</h3>
+                        <p>72, 96, 150, 200, 300, 600 DPI<br>
+                        용도에 맞게 선택 가능</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>© 2024 PDF 통합 처리기. All rights reserved.</p>
+            <p style="margin-top: 5px; font-size: 11px;">이 프로그램은 무료로 제공되며, 광고 수익으로 운영됩니다.</p>
+        </div>
+    </div>
+</body>
+</html>
