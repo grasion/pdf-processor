@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>팁</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+            background: #FFF9E6;
+            padding: 5px;
+            overflow: hidden;
+        }
+        
+        .tip-box {
+            background: white;
+            border-radius: 6px;
+            padding: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            height: 100%;
+            overflow-y: auto;
+        }
+        
+        .tip-title {
+            color: #FF6B00;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .tip-title::before {
+            content: "💡";
+            margin-right: 4px;
+        }
+        
+        .tip-content {
+            color: #333;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+        
+        .tip-content ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .tip-content li {
+            padding: 3px 0;
+            padding-left: 12px;
+            position: relative;
+        }
+        
+        .tip-content li:before {
+            content: "▸";
+            position: absolute;
+            left: 0;
+            color: #FF6B00;
+        }
+        
+        /* Google AdSense 영역 */
+        .ad-mini {
+            margin-top: 8px;
+            text-align: center;
+            min-height: 50px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            padding: 4px;
+            display: none; /* 기본적으로 숨김 */
+        }
+        
+        .ad-mini.show {
+            display: block;
+        }
+    </style>
+    
+    <!-- Google AdSense 스크립트 -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7499194536528772"
+            crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="tip-box">
+        <div class="tip-title">빠른 사용 팁</div>
+        <div class="tip-content">
+            <ul>
+                <li>파일을 드래그하여 빠르게 추가</li>
+                <li>대용량 PDF는 시간이 걸릴 수 있음</li>
+                <li>암호화된 PDF는 먼저 해제 필요</li>
+            </ul>
+        </div>
+        
+        <!-- Google AdSense 미니 광고 -->
+        <div class="ad-mini" id="adContainer">
+            <ins class="adsbygoogle"
+                 style="display:block"
+                 data-ad-client="ca-pub-7499194536528772"
+                 data-ad-slot="5943997057"
+                 data-ad-format="auto"
+                 data-full-width-responsive="true"></ins>
+            <script>
+                 (adsbygoogle = window.adsbygoogle || []).push({});
+            </script>
+        </div>
+    </div>
+    
+    <script>
+        // C#에서 호출할 함수: 광고 표시
+        function showAd() {
+            document.getElementById('adContainer').classList.add('show');
+        }
+        
+        // C#에서 호출할 함수: 광고 숨김
+        function hideAd() {
+            document.getElementById('adContainer').classList.remove('show');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+# 빌드 결과물
+bin/
+obj/
+publish/
+Releases/
+dist/
+dist_*/
+PDF통합처리기_최종/
+
+# 사용자 설정
+*.user
+*.suo
+
+# 임시 파일
+*.tmp
+*.log
+
+# 보안: 토큰 파일
+github_token.txt
+.env
+
+# Visual Studio
+.vs/
+
+# Python
+__pycache__/
+*.pyc
+
+# 기타
+merged_document*
+coffee_qr.png
