@@ -22,13 +22,15 @@ using Sdcb.PaddleInference;
 using CvMat = OpenCvSharp.Mat;
 using CvCv2 = OpenCvSharp.Cv2;
 using CvImreadModes = OpenCvSharp.ImreadModes;
+using LLama;
+using LLama.Common;
 
 namespace PDFProcessor
 {
     public partial class MainWindow : Window
     {
         // 버전 정보
-        private const string APP_VERSION = "1.0.6";
+        private const string APP_VERSION = "1.0.7";
         private const string APP_NAME = "PDF 통합 처리기";
         private const string APP_COPYRIGHT = "Copyright © 2024";
         
@@ -62,6 +64,12 @@ namespace PDFProcessor
         private int ocrCurrentPage = 0;
         private int ocrTotalPages = 0;
         private bool ocrFileIsImage = false;
+        
+        // AI 모델 관련 변수
+        private string aiModelPath = "";
+        private const string AI_MODEL_FILENAME = "gemma-2-2b-it-Q4_K_M.gguf";
+        private const string AI_MODEL_URL = "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf";
+        private const long AI_MODEL_EXPECTED_SIZE = 1_600_000_000; // 약 1.5GB
 
         // 광고 로테이션 관련
         private System.Windows.Threading.DispatcherTimer adRotationTimer;
@@ -2183,7 +2191,10 @@ namespace PDFProcessor
                 });
 
                 OcrResultTextBox.Text = resultText;
-                OcrStatusLabel.Text = "OCR 완료!";
+                OcrStatusLabel.Text = "OCR 완료! AI 보정 시작...";
+                
+                // OCR 완료 후 자동으로 AI 보정 실행
+                await RunAiRefineAfterOcr(resultText);
             }
             catch (Exception ex)
             {
@@ -2394,6 +2405,288 @@ namespace PDFProcessor
             {
                 MessageBox.Show($"클립보드 복사 오류:\n{ex.Message}", "오류",
                     MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void BrowseAiModel_Click(object sender, RoutedEventArgs e)
+        {
+            OpenFileDialog dialog = new OpenFileDialog
+            {
+                Filter = "GGUF 모델 파일 (*.gguf)|*.gguf|모든 파일 (*.*)|*.*",
+                Title = "AI 모델 파일 선택 (GGUF 형식)"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                aiModelPath = dialog.FileName;
+                AiModelPath.Text = Path.GetFileName(aiModelPath);
+                AiStatusLabel.Text = "커스텀 모델 선택 완료.";
+            }
+        }
+
+        private string GetDefaultModelPath()
+        {
+            string modelDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "PDFProcessor", "models");
+            
+            if (!Directory.Exists(modelDir))
+                Directory.CreateDirectory(modelDir);
+            
+            return Path.Combine(modelDir, AI_MODEL_FILENAME);
+        }
+
+        private async Task<string> EnsureModelDownloaded()
+        {
+            string modelPath = GetDefaultModelPath();
+            
+            if (File.Exists(modelPath))
+            {
+                var fileInfo = new FileInfo(modelPath);
+                if (fileInfo.Length > 100_000_000) // 100MB 이상이면 유효한 모델로 간주
+                {
+                    return modelPath;
+                }
+                // 파일이 너무 작으면 불완전한 다운로드 → 삭제 후 재다운로드
+                File.Delete(modelPath);
+            }
+
+            // 다운로드 확인
+            var result = MessageBox.Show(
+                $"AI 보정 모델을 다운로드합니다.\n\n" +
+                $"모델: {AI_MODEL_FILENAME}\n" +
+                $"크기: 약 1.5GB\n" +
+                $"저장 위치: {modelPath}\n\n" +
+                $"다운로드하시겠습니까?",
+                "AI 모델 다운로드",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes)
+                return null;
+
+            // 다운로드 진행
+            using (var httpClient = new System.Net.Http.HttpClient())
+            {
+                httpClient.Timeout = TimeSpan.FromMinutes(30);
+                
+                using (var response = await httpClient.GetAsync(AI_MODEL_URL, System.Net.Http.HttpCompletionOption.ResponseHeadersRead))
+                {
+                    response.EnsureSuccessStatusCode();
+                    
+                    long? totalBytes = response.Content.Headers.ContentLength;
+                    
+                    using (var contentStream = await response.Content.ReadAsStreamAsync())
+                    using (var fileStream = new FileStream(modelPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true))
+                    {
+                        byte[] buffer = new byte[81920];
+                        long totalRead = 0;
+                        int bytesRead;
+                        
+                        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                        {
+                            await fileStream.WriteAsync(buffer, 0, bytesRead);
+                            totalRead += bytesRead;
+                            
+                            if (totalBytes.HasValue)
+                            {
+                                double percent = (double)totalRead / totalBytes.Value * 100;
+                                Dispatcher.Invoke(() =>
+                                {
+                                    AiStatusLabel.Text = $"모델 다운로드 중... {percent:F1}% ({totalRead / 1024 / 1024}MB / {totalBytes.Value / 1024 / 1024}MB)";
+                                    OcrProgressBar.Maximum = 100;
+                                    OcrProgressBar.Value = percent;
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            Dispatcher.Invoke(() =>
+            {
+                AiStatusLabel.Text = "모델 다운로드 완료!";
+                OcrProgressBar.Value = 0;
+            });
+
+            return modelPath;
+        }
+
+        private async void ExecuteAiRefine_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(OcrResultTextBox.Text))
+            {
+                MessageBox.Show("먼저 OCR을 실행하여 텍스트를 추출하세요.", "알림",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // 모델 경로 결정: 커스텀 모델이 있으면 사용, 없으면 기본 모델 자동 다운로드
+            string modelToUse = aiModelPath;
+            
+            if (string.IsNullOrEmpty(modelToUse) || !File.Exists(modelToUse))
+            {
+                try
+                {
+                    AiStatusLabel.Text = "모델 확인 중...";
+                    modelToUse = await EnsureModelDownloaded();
+                    
+                    if (string.IsNullOrEmpty(modelToUse))
+                    {
+                        AiStatusLabel.Text = "모델 다운로드가 취소되었습니다.";
+                        return;
+                    }
+                    
+                    aiModelPath = modelToUse;
+                    AiModelPath.Text = AI_MODEL_FILENAME + " (자동)";
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"모델 다운로드 실패:\n{ex.Message}\n\n" +
+                        "수동으로 GGUF 모델을 선택해주세요.",
+                        "다운로드 오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                    AiStatusLabel.Text = "다운로드 실패. 수동으로 모델을 선택하세요.";
+                    return;
+                }
+            }
+
+            string ocrText = OcrResultTextBox.Text;
+            
+            if (ocrText.Length > 3000)
+            {
+                ocrText = ocrText.Substring(0, 3000);
+                AiStatusLabel.Text = "텍스트가 길어 앞부분 3000자만 처리합니다.";
+            }
+
+            try
+            {
+                AiStatusLabel.Text = "AI 모델 로딩 중...";
+                
+                string refinedText = await Task.Run(() =>
+                {
+                    return RefineTextWithAi(ocrText);
+                });
+
+                OcrResultTextBox.Text = refinedText;
+                AiStatusLabel.Text = "AI 보정 완료!";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"AI 보정 중 오류:\n{ex.Message}", "오류",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                AiStatusLabel.Text = "AI 보정 실패";
+            }
+        }
+
+        private async Task RunAiRefineAfterOcr(string ocrText)
+        {
+            if (string.IsNullOrWhiteSpace(ocrText)) return;
+
+            // 모델 확인/다운로드
+            string modelToUse = aiModelPath;
+            
+            if (string.IsNullOrEmpty(modelToUse) || !File.Exists(modelToUse))
+            {
+                try
+                {
+                    AiStatusLabel.Text = "AI 모델 확인 중...";
+                    modelToUse = await EnsureModelDownloaded();
+                    
+                    if (string.IsNullOrEmpty(modelToUse))
+                    {
+                        AiStatusLabel.Text = "AI 보정 건너뜀 (모델 다운로드 취소)";
+                        return;
+                    }
+                    
+                    aiModelPath = modelToUse;
+                    AiModelPath.Text = AI_MODEL_FILENAME + " (자동)";
+                }
+                catch (Exception ex)
+                {
+                    AiStatusLabel.Text = $"모델 다운로드 실패: {ex.Message}";
+                    return;
+                }
+            }
+
+            string textToRefine = ocrText;
+            if (textToRefine.Length > 3000)
+            {
+                textToRefine = textToRefine.Substring(0, 3000);
+            }
+
+            try
+            {
+                AiStatusLabel.Text = "AI 보정 중...";
+                
+                string refinedText = await Task.Run(() =>
+                {
+                    return RefineTextWithAi(textToRefine);
+                });
+
+                OcrResultTextBox.Text = refinedText;
+                AiStatusLabel.Text = "AI 보정 완료!";
+                OcrStatusLabel.Text = "OCR + AI 보정 완료!";
+            }
+            catch (Exception ex)
+            {
+                AiStatusLabel.Text = $"AI 보정 실패: {ex.Message}";
+                // OCR 결과는 이미 표시되어 있으므로 그대로 유지
+            }
+        }
+
+        private string RefineTextWithAi(string ocrRawText)
+        {
+            var parameters = new ModelParams(aiModelPath)
+            {
+                ContextSize = 4096,
+                GpuLayerCount = 0  // CPU 전용 (GPU 사용 시 값 증가)
+            };
+
+            using (var model = LLamaWeights.LoadFromFile(parameters))
+            using (var context = model.CreateContext(parameters))
+            {
+                var executor = new LLama.StatelessExecutor(model, parameters);
+
+                string prompt = $@"<start_of_turn>user
+다음 OCR 텍스트의 오타를 수정하고 읽기 쉽게 정리하세요. 원본 의미를 유지하세요. 정리된 텍스트만 출력하세요.
+
+{ocrRawText}
+<end_of_turn>
+<start_of_turn>model
+";
+
+                var inferenceParams = new InferenceParams()
+                {
+                    MaxTokens = 2048,
+                    AntiPrompts = new List<string> { "<end_of_turn>", "<start_of_turn>", "User:", "user\n" }
+                };
+
+                var result = new System.Text.StringBuilder();
+                
+                var asyncEnum = executor.InferAsync(prompt, inferenceParams);
+                var enumerator = asyncEnum.GetAsyncEnumerator();
+                try
+                {
+                    while (enumerator.MoveNextAsync().AsTask().GetAwaiter().GetResult())
+                    {
+                        result.Append(enumerator.Current);
+                        
+                        Dispatcher.Invoke(() =>
+                        {
+                            AiStatusLabel.Text = $"AI 생성 중... ({result.Length}자)";
+                        });
+                    }
+                }
+                finally
+                {
+                    enumerator.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                }
+
+                // 결과에서 불필요한 태그/프롬프트 잔여물 제거
+                string cleanResult = result.ToString().Trim();
+                cleanResult = cleanResult.Replace("<end_of_turn>", "").Replace("<start_of_turn>", "").Trim();
+                
+                return cleanResult;
             }
         }
 
