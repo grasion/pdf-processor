@@ -20,7 +20,7 @@ namespace PDFProcessor
     public partial class MainWindow : Window
     {
         // 버전 정보
-        private const string APP_VERSION = "1.0.8";
+        private const string APP_VERSION = "1.0.9";
         private const string APP_NAME = "PDF 통합 처리기";
         private const string APP_COPYRIGHT = "Copyright © 2024";
         
