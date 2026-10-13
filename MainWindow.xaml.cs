@@ -12,25 +12,15 @@ using PdfSharp.Pdf;
 using PdfSharp.Pdf.IO;
 using PdfSharp.Drawing;
 using PdfiumViewer;
-using QRCoder;
 using Velopack;
 using Velopack.Sources;
-using Sdcb.PaddleOCR;
-using Sdcb.PaddleOCR.Models;
-using Sdcb.PaddleOCR.Models.Online;
-using Sdcb.PaddleInference;
-using CvMat = OpenCvSharp.Mat;
-using CvCv2 = OpenCvSharp.Cv2;
-using CvImreadModes = OpenCvSharp.ImreadModes;
-using LLama;
-using LLama.Common;
 
 namespace PDFProcessor
 {
     public partial class MainWindow : Window
     {
         // 버전 정보
-        private const string APP_VERSION = "1.0.7";
+        private const string APP_VERSION = "1.0.8";
         private const string APP_NAME = "PDF 통합 처리기";
         private const string APP_COPYRIGHT = "Copyright © 2024";
         
@@ -59,35 +49,13 @@ namespace PDFProcessor
         private int convertCurrentPage = 0;
         private int convertTotalPages = 0;
 
-        // OCR 관련 변수
-        private string ocrFilePath = "";
-        private int ocrCurrentPage = 0;
-        private int ocrTotalPages = 0;
-        private bool ocrFileIsImage = false;
-        
-        // AI 모델 관련 변수
-        private string aiModelPath = "";
-        private const string AI_MODEL_FILENAME = "gemma-2-2b-it-Q4_K_M.gguf";
-        private const string AI_MODEL_URL = "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf";
-        private const long AI_MODEL_EXPECTED_SIZE = 1_600_000_000; // 약 1.5GB
-
-        // 광고 로테이션 관련
-        private System.Windows.Threading.DispatcherTimer adRotationTimer;
-        private int currentAdIndex = 0;
-        private readonly (string Link, string ImageUrl)[] adItems = new[]
-        {
-            ("https://iryan.kr/t8ggybtskr", "https://img.tenping.kr/Content/Upload/Images/2022012716580003_Ver_20230120154604.jpg?RS=800X1200"),
-            ("https://iryan.kr/t8ggybtsks", "https://img.tenping.kr/Content/Upload/Images/2025100108330001_Squa_20251017093317.png?RS=600X600"),
-            ("https://iryan.kr/t8ggmwohcl", "https://img.tenping.kr/Content/Upload/Images/2022032316020001_Squa_20240405162509.png?RS=600X600"),
-        };
-
         public MainWindow()
         {
             InitializeComponent();
             ExtractPdfiumDll();
             SetWindowIcon();
             InitializeDefaults();
-            InitializeAdRotation();
+            InitializeInlineEditing();
             
             // 업데이트 확인 (비동기)
             _ = CheckForUpdatesAsync();
@@ -177,199 +145,6 @@ namespace PDFProcessor
             ConvertFileNamePattern.Text = "{filename}_page_{page}";
         }
 
-        private const string TENPING_AD_URL = "https://iryan.kr/t8ggu153z7";
-
-        private void TenpingAd_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            try
-            {
-                // 현재 광고 인덱스의 링크로 이동
-                string adLink = adItems[currentAdIndex].Link;
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = adLink,
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"광고 링크 열기 실패: {ex.Message}");
-            }
-        }
-
-        private void InitializeAdRotation()
-        {
-            // 첫 번째 광고 이미지 설정
-            UpdateAdImages();
-
-            // 5초마다 광고 로테이션
-            adRotationTimer = new System.Windows.Threading.DispatcherTimer();
-            adRotationTimer.Interval = TimeSpan.FromSeconds(5);
-            adRotationTimer.Tick += (s, e) =>
-            {
-                currentAdIndex = (currentAdIndex + 1) % adItems.Length;
-                UpdateAdImages();
-            };
-            adRotationTimer.Start();
-        }
-
-        private void UpdateAdImages()
-        {
-            try
-            {
-                var imageUri = new Uri(adItems[currentAdIndex].ImageUrl);
-                var bitmap = new BitmapImage(imageUri);
-
-                // 모든 탭의 광고 이미지 업데이트
-                if (FindName("SplitAdImage") is Image splitAd) splitAd.Source = bitmap;
-                if (FindName("MergeAdImage") is Image mergeAd) mergeAd.Source = bitmap;
-                if (FindName("ConvertAdImage") is Image convertAd) convertAd.Source = bitmap;
-                if (FindName("OcrAdImage") is Image ocrAd) ocrAd.Source = bitmap;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"광고 이미지 업데이트 실패: {ex.Message}");
-            }
-        }
-
-
-        private void CoffeeBanner_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            // QR 코드 팝업 창 표시
-            ShowQRCodePopup();
-        }
-
-        private void BlogBanner_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            try
-            {
-                // 블로그 URL 열기
-                string blogUrl = "https://1st-life-2nd.tistory.com/";
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = blogUrl,
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"블로그를 열 수 없습니다:\n{ex.Message}", "오류",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void ShowQRCodePopup()
-        {
-            try
-            {
-                // 팝업 창 생성
-                Window popup = new Window
-                {
-                    Title = "개발자에게 커피 사주기",
-                    Width = 400,
-                    Height = 500,
-                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                    Owner = this,
-                    ResizeMode = ResizeMode.NoResize,
-                    Background = System.Windows.Media.Brushes.White
-                };
-
-                // 팝업 내용 구성
-                StackPanel panel = new StackPanel
-                {
-                    Margin = new Thickness(20)
-                };
-
-                // 제목
-                TextBlock title = new TextBlock
-                {
-                    Text = "☕ 개발자에게 커피 사주기",
-                    FontSize = 20,
-                    FontWeight = FontWeights.Bold,
-                    Foreground = new System.Windows.Media.SolidColorBrush(
-                        System.Windows.Media.Color.FromRgb(255, 111, 0)),
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    Margin = new Thickness(0, 0, 0, 15)
-                };
-                panel.Children.Add(title);
-
-                // QR 코드 이미지
-                Border qrBorder = new Border
-                {
-                    Background = System.Windows.Media.Brushes.White,
-                    BorderBrush = new System.Windows.Media.SolidColorBrush(
-                        System.Windows.Media.Color.FromRgb(255, 111, 0)),
-                    BorderThickness = new Thickness(3),
-                    CornerRadius = new CornerRadius(10),
-                    Padding = new Thickness(10),
-                    Margin = new Thickness(0, 0, 0, 15),
-                    Width = 300,
-                    Height = 300
-                };
-
-                Image qrImage = new Image
-                {
-                    Stretch = System.Windows.Media.Stretch.Uniform
-                };
-                // QR 코드 직접 생성
-                try
-                {
-                    using (QRCodeGenerator qrGenerator = new QRCodeGenerator())
-                    {
-                        QRCodeData qrCodeData = qrGenerator.CreateQrCode("https://qr.kakaopay.com/Ej9Q6cblA9c409206", QRCodeGenerator.ECCLevel.Q);
-                        using (QRCode qrCode = new QRCode(qrCodeData))
-                        {
-                            System.Drawing.Bitmap qrBitmap = qrCode.GetGraphic(20);
-                            qrImage.Source = ConvertBitmapToBitmapSource(qrBitmap);
-                        }
-                    }
-                }
-                catch { }
-                qrBorder.Child = qrImage;
-                panel.Children.Add(qrBorder);
-
-                // 안내 문구
-                TextBlock message1 = new TextBlock
-                {
-                    Text = "이 프로그램이 도움이 되셨나요?",
-                    FontSize = 14,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    Margin = new Thickness(0, 0, 0, 5)
-                };
-                panel.Children.Add(message1);
-
-                TextBlock message2 = new TextBlock
-                {
-                    Text = "QR 코드를 스캔하여 개발자에게\n커피 한 잔의 응원을 보내주세요!",
-                    FontSize = 13,
-                    Foreground = System.Windows.Media.Brushes.Gray,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    TextAlignment = TextAlignment.Center,
-                    Margin = new Thickness(0, 0, 0, 10)
-                };
-                panel.Children.Add(message2);
-
-                TextBlock message3 = new TextBlock
-                {
-                    Text = "여러분의 작은 후원이 더 나은 프로그램을\n만드는 데 큰 힘이 됩니다. 감사합니다! 😊",
-                    FontSize = 11,
-                    Foreground = System.Windows.Media.Brushes.DarkGray,
-                    FontStyle = FontStyles.Italic,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    TextAlignment = TextAlignment.Center
-                };
-                panel.Children.Add(message3);
-
-                popup.Content = panel;
-                popup.ShowDialog();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"팝업 표시 오류:\n{ex.Message}", "오류",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
         private void ShowAbout_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -448,7 +223,7 @@ namespace PDFProcessor
                     Text = "• PDF 분할 (페이지 범위, 개별, 단위)\n" +
                            "• PDF 병합 (PDF + 이미지)\n" +
                            "• PDF → 이미지 변환 (PNG, JPG, BMP, TIFF)\n" +
-                           "• OCR 텍스트 추출 (PDF, 이미지)\n" +
+                           "• PDF 텍스트 수정 (원본 글꼴 유지)\n" +
                            "• 실시간 미리보기\n" +
                            "• 드래그 앤 드롭 지원",
                     FontSize = 12,
@@ -469,20 +244,7 @@ namespace PDFProcessor
                 };
                 panel.Children.Add(copyright);
 
-                // 후원 안내
-                TextBlock support = new TextBlock
-                {
-                    Text = "이 프로그램이 유용하셨다면\n하단 배너를 클릭하여 개발자를 응원해주세요!",
-                    FontSize = 11,
-                    Foreground = new System.Windows.Media.SolidColorBrush(
-                        System.Windows.Media.Color.FromRgb(255, 111, 0)),
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    TextAlignment = TextAlignment.Center,
-                    FontStyle = FontStyles.Italic
-                };
-                panel.Children.Add(support);
-
-                aboutWindow.Content = panel;
+aboutWindow.Content = panel;
                 aboutWindow.ShowDialog();
             }
             catch (Exception ex)
@@ -1096,6 +858,7 @@ namespace PDFProcessor
                 MergeFileList.Items[index] = MergeFileList.Items[index - 1];
                 MergeFileList.Items[index - 1] = tempItem;
 
+                LoadAllMergePages();
                 MergeFileList.SelectedIndex = index - 1;
             }
         }
@@ -1113,6 +876,7 @@ namespace PDFProcessor
                 MergeFileList.Items[index] = MergeFileList.Items[index + 1];
                 MergeFileList.Items[index + 1] = tempItem;
 
+                LoadAllMergePages();
                 MergeFileList.SelectedIndex = index + 1;
             }
         }
@@ -1277,7 +1041,15 @@ namespace PDFProcessor
 
         private void LoadAllMergePages()
         {
+            // Keep rotations attached to their source page when files move or are removed.
+            var rotationsByPage = allPages.ToDictionary(
+                page => (page.FilePath, page.PageInFile),
+                page => pageRotations.TryGetValue(page.PageIndex, out int angle) ? angle : 0);
+            var checkedPages = allPages.Where(page => selectedPageIndices.Contains(page.PageIndex))
+                .Select(page => (page.FilePath, page.PageInFile)).ToHashSet();
             allPages.Clear();
+            pageRotations.Clear();
+            selectedPageIndices.Clear();
             currentPreviewPageIndex = 0;
             
             int globalPageIndex = 0;
@@ -1345,6 +1117,15 @@ namespace PDFProcessor
                 }
             }
             
+            foreach (var page in allPages)
+            {
+                var key = (page.FilePath, page.PageInFile);
+                if (rotationsByPage.TryGetValue(key, out int angle) && angle != 0)
+                    pageRotations[page.PageIndex] = angle;
+                page.IsChecked = checkedPages.Contains(key);
+                if (page.IsChecked) selectedPageIndices.Add(page.PageIndex);
+            }
+            UpdateRotationModeLabel();
             // 썸네일 리스트 업데이트
             UpdateThumbnailList();
             
@@ -1384,35 +1165,27 @@ namespace PDFProcessor
             
             try
             {
-                BitmapSource image = null;
-                
-                if (Path.GetExtension(pageInfo.FilePath).ToLower() == ".pdf")
-                {
-                    image = RenderPdfPageToImageFromFile(pageInfo.FilePath, pageInfo.PageInFile);
-                }
-                else
-                {
-                    BitmapImage bitmap = new BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.UriSource = new Uri(pageInfo.FilePath);
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.EndInit();
-                    image = bitmap;
-                }
-                
-                // 회전 적용
-                if (pageRotations.ContainsKey(pageIndex) && pageRotations[pageIndex] != 0)
-                {
-                    image = RotateBitmapSource(image, pageRotations[pageIndex]);
-                }
-                
-                MergePreviewImage.Source = image;
-                MergePageInfo.Text = $"페이지: {pageIndex + 1} / {allPages.Count}";
-                
+                using var preview = new PdfSharp.Pdf.PdfDocument();
+                int rotation = pageRotations.TryGetValue(pageIndex, out int angle) ? angle : 0;
+                MergePageLayout.AddPage(preview, pageInfo.FilePath, pageInfo.PageInFile,
+                    rotation, SelectedMergePaper, SelectedMergeOrientation);
+                using var stream = new MemoryStream();
+                preview.Save(stream, false);
+                stream.Position = 0;
+                using var rendered = PdfiumViewer.PdfDocument.Load(stream);
+                var size = rendered.PageSizes[0];
+                double scale = Math.Min(800.0 / size.Width, 1000.0 / size.Height);
+                using var image = rendered.Render(0, Math.Max(1, (int)(size.Width * scale)),
+                    Math.Max(1, (int)(size.Height * scale)), 96, 96, false);
+                using var bitmap = new System.Drawing.Bitmap(image);
+                MergePreviewImage.Source = ConvertBitmapToBitmapSource(bitmap);
+                MergePageInfo.Text = $"페이지: {pageIndex + 1} / {allPages.Count} · {SelectedMergePaper} / {SelectedMergeOrientation}";
                 UpdateRotationStatus(pageIndex);
             }
             catch (Exception ex)
             {
+                MergePreviewImage.Source = CreateErrorImage($"미리보기를 불러올 수 없습니다.\n{ex.Message}");
+                MergeStatusLabel.Text = $"미리보기 오류: {ex.Message}";
                 System.Diagnostics.Debug.WriteLine($"미리보기 오류: {ex.Message}");
             }
         }
@@ -1517,90 +1290,75 @@ namespace PDFProcessor
             }
         }
 
+        private string SelectedMergePaper =>
+            (MergePageSize.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "A4";
+
+        private string SelectedMergeOrientation =>
+            (MergePageOrientation.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "세로";
+
+        private void MergeLayout_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsInitialized || MergePreviewImage == null || allPages.Count == 0) return;
+            ShowPreviewPage(currentPreviewPageIndex);
+        }
+
         private void ExecuteMerge_Click(object sender, RoutedEventArgs e)
         {
-            if (mergeFiles.Count == 0)
+            if (mergeFiles.Count == 0 || allPages.Count == 0)
             {
-                MessageBox.Show("병합할 파일을 추가하세요.", "오류", 
+                MessageBox.Show("병합할 파일을 추가하세요.", "안내",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            string outputPath = Path.Combine(MergeSavePath.Text, MergeFileName.Text);
-
+            string temporaryPath = null;
             try
             {
+                string filename = MergeFileName.Text.Trim();
+                if (string.IsNullOrWhiteSpace(filename) || Path.GetFileName(filename) != filename ||
+                    filename.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                    throw new InvalidOperationException("올바른 PDF 파일명을 입력하세요.");
+                if (!filename.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) filename += ".pdf";
+                string outputPath = Path.GetFullPath(Path.Combine(MergeSavePath.Text, filename));
+                if (mergeFiles.Any(path => string.Equals(Path.GetFullPath(path), outputPath, StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidOperationException("원본 파일과 다른 파일명 또는 저장 폴더를 선택하세요.");
+                if (allPages.Select(page => page.FilePath).Distinct().Count() != mergeFiles.Count)
+                    throw new InvalidOperationException("불러오지 못한 파일이 있습니다. 파일 목록을 확인하세요.");
+                if (File.Exists(outputPath) && MessageBox.Show("같은 이름의 파일이 있습니다. 덮어쓰시겠습니까?",
+                    "파일 저장", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+
                 MergeProgressBar.Maximum = allPages.Count;
                 MergeProgressBar.Value = 0;
                 MergeStatusLabel.Text = "PDF 병합 중...";
-
-                PdfSharp.Pdf.PdfDocument outputDoc = new PdfSharp.Pdf.PdfDocument();
-
-                // 페이지 단위로 병합
+                using var outputDoc = new PdfSharp.Pdf.PdfDocument();
                 for (int pageIndex = 0; pageIndex < allPages.Count; pageIndex++)
                 {
                     var pageInfo = allPages[pageIndex];
-                    string ext = Path.GetExtension(pageInfo.FilePath).ToLower();
-
-                    if (ext == ".pdf")
-                    {
-                        PdfSharp.Pdf.PdfDocument inputDoc = PdfReader.Open(pageInfo.FilePath, PdfDocumentOpenMode.Import);
-                        var addedPage = outputDoc.AddPage(inputDoc.Pages[pageInfo.PageInFile]);
-                        
-                        // 회전 적용
-                        if (pageRotations.ContainsKey(pageIndex) && pageRotations[pageIndex] != 0)
-                        {
-                            addedPage.Rotate = pageRotations[pageIndex];
-                        }
-                        
-                        inputDoc.Dispose();
-                    }
-                    else
-                    {
-                        // 이미지를 PDF 페이지로 변환
-                        PdfPage page = outputDoc.AddPage();
-                        
-                        // 회전 적용
-                        if (pageRotations.ContainsKey(pageIndex) && pageRotations[pageIndex] != 0)
-                        {
-                            page.Rotate = pageRotations[pageIndex];
-                        }
-                        
-                        XGraphics gfx = XGraphics.FromPdfPage(page);
-                        XImage img = XImage.FromFile(pageInfo.FilePath);
-
-                        double pageWidth = page.Width.Point;
-                        double pageHeight = page.Height.Point;
-                        double imgWidth = img.PixelWidth;
-                        double imgHeight = img.PixelHeight;
-
-                        double scale = Math.Min(pageWidth / imgWidth, pageHeight / imgHeight);
-                        double width = imgWidth * scale;
-                        double height = imgHeight * scale;
-                        double x = (pageWidth - width) / 2;
-                        double y = (pageHeight - height) / 2;
-
-                        gfx.DrawImage(img, x, y, width, height);
-                    }
-
+                    int rotation = pageRotations.TryGetValue(pageIndex, out int angle) ? angle : 0;
+                    MergePageLayout.AddPage(outputDoc, pageInfo.FilePath, pageInfo.PageInFile,
+                        rotation, SelectedMergePaper, SelectedMergeOrientation);
                     MergeProgressBar.Value = pageIndex + 1;
-                    MergeStatusLabel.Text = $"병합 중... {pageIndex + 1}/{allPages.Count}";
                 }
 
-                outputDoc.Save(outputPath);
-                outputDoc.Dispose();
-
-                MergeStatusLabel.Text = "완료!";
-                MessageBox.Show($"PDF 병합이 완료되었습니다.\n저장 위치: {outputPath}", "완료", 
+                temporaryPath = Path.Combine(Path.GetDirectoryName(outputPath), $".merge-{Guid.NewGuid():N}.tmp");
+                outputDoc.Save(temporaryPath);
+                File.Move(temporaryPath, outputPath, true);
+                MergeFileName.Text = filename;
+                MergeStatusLabel.Text = $"완료 · {allPages.Count}페이지 · {SelectedMergePaper} / {SelectedMergeOrientation}";
+                MessageBox.Show($"PDF 병합이 완료되었습니다.\n저장 위치: {outputPath}", "완료",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"PDF 병합 중 오류가 발생했습니다:\n{ex.Message}", "오류", 
+                MergeStatusLabel.Text = "병합 실패 · 설정과 파일을 확인하세요.";
+                MessageBox.Show($"PDF 병합 중 오류가 발생했습니다:\n{ex.Message}", "오류",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
+            finally
+            {
+                if (temporaryPath != null && File.Exists(temporaryPath)) File.Delete(temporaryPath);
+            }
         }
-
         #endregion
 
         #region PDF → 이미지 변환 기능
@@ -1925,768 +1683,6 @@ namespace PDFProcessor
             {
                 MessageBox.Show($"PDF 변환 중 오류가 발생했습니다:\n{ex.Message}", "오류", 
                     MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        #endregion
-
-        #region OCR 텍스트 추출 기능
-
-        private void OcrDropZone_DragEnter(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                e.Effects = DragDropEffects.Copy;
-            }
-            else
-            {
-                e.Effects = DragDropEffects.None;
-            }
-            e.Handled = false;
-        }
-
-        private void OcrDropZone_DragOver(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                e.Effects = DragDropEffects.Copy;
-            }
-            e.Handled = false;
-        }
-
-        private void OcrDropZone_Drop(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                if (files != null && files.Length > 0)
-                {
-                    LoadOcrFile(files[0]);
-                }
-            }
-        }
-
-        private void SelectOcrFile_Click(object sender, RoutedEventArgs e)
-        {
-            OpenFileDialog dialog = new OpenFileDialog
-            {
-                Filter = "지원 파일|*.pdf;*.png;*.jpg;*.jpeg;*.bmp;*.tiff;*.gif|" +
-                        "PDF 파일|*.pdf|이미지 파일|*.png;*.jpg;*.jpeg;*.bmp;*.tiff;*.gif",
-                Title = "OCR할 파일 선택"
-            };
-
-            if (dialog.ShowDialog() == true)
-            {
-                LoadOcrFile(dialog.FileName);
-            }
-        }
-
-        private void LoadOcrFile(string filePath)
-        {
-            string ext = Path.GetExtension(filePath).ToLower();
-            string[] supportedExts = { ".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".gif" };
-
-            if (!supportedExts.Contains(ext))
-            {
-                MessageBox.Show("PDF 또는 이미지 파일만 선택할 수 있습니다.", "오류",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            ocrFilePath = filePath;
-            ocrFileIsImage = ext != ".pdf";
-            OcrFileLabel.Text = $"선택된 파일: {Path.GetFileName(ocrFilePath)}";
-            OcrStatusLabel.Text = "파일이 선택되었습니다. OCR 옵션을 설정 후 실행하세요.";
-            OcrResultTextBox.Text = "";
-
-            if (ocrFileIsImage)
-            {
-                ocrTotalPages = 1;
-                ocrCurrentPage = 0;
-                OcrPageThumbnailList.Items.Clear();
-
-                try
-                {
-                    BitmapImage bitmap = new BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.UriSource = new Uri(filePath);
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.EndInit();
-
-                    OcrPreviewImage.Source = bitmap;
-                    OcrPageLabel.Text = "이미지 파일";
-
-                    // 썸네일
-                    BitmapImage thumb = new BitmapImage();
-                    thumb.BeginInit();
-                    thumb.UriSource = new Uri(filePath);
-                    thumb.DecodePixelWidth = 120;
-                    thumb.CacheOption = BitmapCacheOption.OnLoad;
-                    thumb.EndInit();
-
-                    OcrPageThumbnailList.Items.Add(new SimplePageInfo
-                    {
-                        PageIndex = 0,
-                        Thumbnail = thumb,
-                        PageLabel = "이미지"
-                    });
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"이미지 로드 실패:\n{ex.Message}", "오류",
-                        MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
-            else
-            {
-                LoadOcrPdfPreview();
-            }
-        }
-
-        private void LoadOcrPdfPreview()
-        {
-            try
-            {
-                using (var pdfDoc = PdfReader.Open(ocrFilePath, PdfDocumentOpenMode.Import))
-                {
-                    ocrTotalPages = pdfDoc.PageCount;
-                }
-                ocrCurrentPage = 0;
-
-                LoadOcrThumbnails();
-                ShowOcrPreviewPage();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"PDF 미리보기 로드 실패:\n{ex.Message}", "오류",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void LoadOcrThumbnails()
-        {
-            OcrPageThumbnailList.Items.Clear();
-
-            for (int i = 0; i < ocrTotalPages; i++)
-            {
-                try
-                {
-                    var thumbnail = RenderPdfPageToImageFromFile(ocrFilePath, i, 72);
-                    OcrPageThumbnailList.Items.Add(new SimplePageInfo
-                    {
-                        PageIndex = i,
-                        Thumbnail = thumbnail,
-                        PageLabel = $"페이지 {i + 1}"
-                    });
-                }
-                catch { }
-            }
-        }
-
-        private void OcrPageThumbnail_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (OcrPageThumbnailList.SelectedItem is SimplePageInfo pageInfo)
-            {
-                ocrCurrentPage = pageInfo.PageIndex;
-                ShowOcrPreviewPage();
-            }
-        }
-
-        private void OcrPreview_MouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
-        {
-            if (ocrTotalPages <= 1) return;
-
-            if (e.Delta > 0 && ocrCurrentPage > 0)
-            {
-                ocrCurrentPage--;
-                ShowOcrPreviewPage();
-                e.Handled = true;
-            }
-            else if (e.Delta < 0 && ocrCurrentPage < ocrTotalPages - 1)
-            {
-                ocrCurrentPage++;
-                ShowOcrPreviewPage();
-                e.Handled = true;
-            }
-        }
-
-        private void ShowOcrPreviewPage()
-        {
-            if (string.IsNullOrEmpty(ocrFilePath) || ocrTotalPages == 0) return;
-
-            try
-            {
-                if (ocrFileIsImage)
-                {
-                    // 이미지 파일은 이미 로드됨
-                    return;
-                }
-
-                var image = RenderPdfPageToImageFromFile(ocrFilePath, ocrCurrentPage);
-                if (image != null)
-                {
-                    OcrPreviewImage.Source = image;
-                }
-                OcrPageLabel.Text = $"페이지: {ocrCurrentPage + 1}/{ocrTotalPages}";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"미리보기 표시 오류:\n{ex.Message}", "오류",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void OcrPrevPage_Click(object sender, RoutedEventArgs e)
-        {
-            if (ocrCurrentPage > 0)
-            {
-                ocrCurrentPage--;
-                ShowOcrPreviewPage();
-            }
-        }
-
-        private void OcrNextPage_Click(object sender, RoutedEventArgs e)
-        {
-            if (ocrCurrentPage < ocrTotalPages - 1)
-            {
-                ocrCurrentPage++;
-                ShowOcrPreviewPage();
-            }
-        }
-
-        private void OcrMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (OcrRangePanel == null) return;
-
-            OcrRangePanel.Visibility = OcrModeRange.IsChecked == true
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-        }
-
-        private async void ExecuteOcr_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrEmpty(ocrFilePath))
-            {
-                MessageBox.Show("파일을 먼저 선택하세요.", "오류",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            // 언어 설정
-            string language = "korean";
-            if (OcrLanguage.SelectedItem is ComboBoxItem langItem && langItem.Tag != null)
-            {
-                language = langItem.Tag.ToString();
-            }
-
-            try
-            {
-                OcrProgressBar.Value = 0;
-                OcrStatusLabel.Text = "OCR 모델 로딩 중... (최초 실행 시 모델 다운로드)";
-                OcrResultTextBox.Text = "";
-
-                string resultText = await Task.Run(async () =>
-                {
-                    return await PerformPaddleOcr(language);
-                });
-
-                OcrResultTextBox.Text = resultText;
-                OcrStatusLabel.Text = "OCR 완료! AI 보정 시작...";
-                
-                // OCR 완료 후 자동으로 AI 보정 실행
-                await RunAiRefineAfterOcr(resultText);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"OCR 처리 중 오류가 발생했습니다:\n{ex.Message}\n\n{ex.InnerException?.Message}", "오류",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-                OcrStatusLabel.Text = "OCR 오류 발생";
-            }
-        }
-
-        private async Task<FullOcrModel> GetPaddleOcrModel(string language)
-        {
-            switch (language)
-            {
-                case "korean":
-                    // 한국어: 서버급 Detection + V4 한국어 Recognition (최고 정확도)
-                    return new FullOcrModel(
-                        await OnlineDetectionModel.ChineseServerV4.DownloadAsync(),
-                        await OnlineClassificationModel.ChineseMobileV2.DownloadAsync(),
-                        await LocalDictOnlineRecognizationModel.KoreanV4.DownloadAsync());
-                case "english":
-                    return new FullOcrModel(
-                        await OnlineDetectionModel.ChineseServerV4.DownloadAsync(),
-                        await OnlineClassificationModel.ChineseMobileV2.DownloadAsync(),
-                        await LocalDictOnlineRecognizationModel.EnglishV4.DownloadAsync());
-                case "japan":
-                    return new FullOcrModel(
-                        await OnlineDetectionModel.ChineseServerV4.DownloadAsync(),
-                        await OnlineClassificationModel.ChineseMobileV2.DownloadAsync(),
-                        await LocalDictOnlineRecognizationModel.JapanV4.DownloadAsync());
-                case "chinese":
-                    // 중국어: 서버 모델 전체 사용
-                    return await OnlineFullModels.ChineseServerV4.DownloadAsync();
-                case "korean+english":
-                    // 한국어+영어: 한국어 모델이 영어도 인식 가능
-                    return new FullOcrModel(
-                        await OnlineDetectionModel.ChineseServerV4.DownloadAsync(),
-                        await OnlineClassificationModel.ChineseMobileV2.DownloadAsync(),
-                        await LocalDictOnlineRecognizationModel.KoreanV4.DownloadAsync());
-                default:
-                    return new FullOcrModel(
-                        await OnlineDetectionModel.ChineseServerV4.DownloadAsync(),
-                        await OnlineClassificationModel.ChineseMobileV2.DownloadAsync(),
-                        await LocalDictOnlineRecognizationModel.KoreanV4.DownloadAsync());
-            }
-        }
-
-        private async Task<string> PerformPaddleOcr(string language)
-        {
-            var resultBuilder = new System.Text.StringBuilder();
-
-            FullOcrModel model = await GetPaddleOcrModel(language);
-
-            using (PaddleOcrAll all = new PaddleOcrAll(model, PaddleDevice.Mkldnn())
-            {
-                AllowRotateDetection = true,
-                Enable180Classification = true,
-            })
-            {
-                // 서버 모델 + 파라미터 최적화로 인식률 극대화
-                all.Detector.MaxSize = 1536;        // 기본 960 → 1536으로 올려 세밀한 텍스트 감지
-                all.Detector.UnclipRatio = 1.6f;    // 글자 박스를 더 타이트하게 (기본 1.5)
-                if (ocrFileIsImage)
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        OcrProgressBar.Maximum = 1;
-                        OcrProgressBar.Value = 0;
-                        OcrStatusLabel.Text = "이미지 OCR 처리 중...";
-                    });
-
-                    using (CvMat src = CvCv2.ImRead(ocrFilePath))
-                    {
-                        PaddleOcrResult result = all.Run(src);
-                        resultBuilder.AppendLine(result.Text);
-                    }
-
-                    Dispatcher.Invoke(() => OcrProgressBar.Value = 1);
-                }
-                else
-                {
-                    int startPage = 0;
-                    int endPage = ocrTotalPages;
-
-                    Dispatcher.Invoke(() =>
-                    {
-                        if (OcrModeCurrentPage.IsChecked == true)
-                        {
-                            startPage = ocrCurrentPage;
-                            endPage = ocrCurrentPage + 1;
-                        }
-                        else if (OcrModeRange.IsChecked == true)
-                        {
-                            if (int.TryParse(OcrStartPage.Text, out int s) && int.TryParse(OcrEndPage.Text, out int en))
-                            {
-                                startPage = s - 1;
-                                endPage = en;
-                            }
-                        }
-                    });
-
-                    if (startPage < 0) startPage = 0;
-                    if (endPage > ocrTotalPages) endPage = ocrTotalPages;
-
-                    int pageCount = endPage - startPage;
-                    Dispatcher.Invoke(() =>
-                    {
-                        OcrProgressBar.Maximum = pageCount;
-                        OcrProgressBar.Value = 0;
-                    });
-
-                    using (var pdfDocument = PdfiumViewer.PdfDocument.Load(ocrFilePath))
-                    {
-                        for (int i = startPage; i < endPage; i++)
-                        {
-                            Dispatcher.Invoke(() =>
-                            {
-                                OcrStatusLabel.Text = $"페이지 {i + 1} OCR 처리 중... ({i - startPage + 1}/{pageCount})";
-                            });
-
-                            var pageSize = pdfDocument.PageSizes[i];
-                            int width = (int)(pageSize.Width * 300 / 72.0);
-                            int height = (int)(pageSize.Height * 300 / 72.0);
-                            width = Math.Max(100, Math.Min(width, 6000));
-                            height = Math.Max(100, Math.Min(height, 8000));
-
-                            using (var rendered = pdfDocument.Render(i, width, height, 300, 300, false))
-                            {
-                                using (var bitmap = new System.Drawing.Bitmap(rendered))
-                                {
-                                    using (var ms = new MemoryStream())
-                                    {
-                                        bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-                                        byte[] imageBytes = ms.ToArray();
-
-                                        using (CvMat src = CvCv2.ImDecode(imageBytes, CvImreadModes.Color))
-                                        {
-                                            PaddleOcrResult result = all.Run(src);
-                                            if (pageCount > 1)
-                                            {
-                                                resultBuilder.AppendLine($"=== 페이지 {i + 1} ===");
-                                            }
-                                            resultBuilder.AppendLine(result.Text);
-                                            if (pageCount > 1)
-                                            {
-                                                resultBuilder.AppendLine();
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Dispatcher.Invoke(() => OcrProgressBar.Value = i - startPage + 1);
-                        }
-                    }
-                }
-            }
-
-            return resultBuilder.ToString();
-        }
-
-        private void SaveOcrResult_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrEmpty(OcrResultTextBox.Text))
-            {
-                MessageBox.Show("저장할 OCR 결과가 없습니다.", "알림",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            SaveFileDialog dialog = new SaveFileDialog
-            {
-                Filter = "텍스트 파일 (*.txt)|*.txt|모든 파일 (*.*)|*.*",
-                Title = "OCR 결과 저장",
-                FileName = Path.GetFileNameWithoutExtension(ocrFilePath) + "_ocr.txt"
-            };
-
-            if (dialog.ShowDialog() == true)
-            {
-                try
-                {
-                    File.WriteAllText(dialog.FileName, OcrResultTextBox.Text, System.Text.Encoding.UTF8);
-                    MessageBox.Show($"OCR 결과가 저장되었습니다.\n{dialog.FileName}", "저장 완료",
-                        MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"저장 중 오류:\n{ex.Message}", "오류",
-                        MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
-        }
-
-        private void CopyOcrResult_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrEmpty(OcrResultTextBox.Text))
-            {
-                MessageBox.Show("복사할 OCR 결과가 없습니다.", "알림",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            try
-            {
-                Clipboard.SetText(OcrResultTextBox.Text);
-                OcrStatusLabel.Text = "클립보드에 복사되었습니다.";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"클립보드 복사 오류:\n{ex.Message}", "오류",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void BrowseAiModel_Click(object sender, RoutedEventArgs e)
-        {
-            OpenFileDialog dialog = new OpenFileDialog
-            {
-                Filter = "GGUF 모델 파일 (*.gguf)|*.gguf|모든 파일 (*.*)|*.*",
-                Title = "AI 모델 파일 선택 (GGUF 형식)"
-            };
-
-            if (dialog.ShowDialog() == true)
-            {
-                aiModelPath = dialog.FileName;
-                AiModelPath.Text = Path.GetFileName(aiModelPath);
-                AiStatusLabel.Text = "커스텀 모델 선택 완료.";
-            }
-        }
-
-        private string GetDefaultModelPath()
-        {
-            string modelDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "PDFProcessor", "models");
-            
-            if (!Directory.Exists(modelDir))
-                Directory.CreateDirectory(modelDir);
-            
-            return Path.Combine(modelDir, AI_MODEL_FILENAME);
-        }
-
-        private async Task<string> EnsureModelDownloaded()
-        {
-            string modelPath = GetDefaultModelPath();
-            
-            if (File.Exists(modelPath))
-            {
-                var fileInfo = new FileInfo(modelPath);
-                if (fileInfo.Length > 100_000_000) // 100MB 이상이면 유효한 모델로 간주
-                {
-                    return modelPath;
-                }
-                // 파일이 너무 작으면 불완전한 다운로드 → 삭제 후 재다운로드
-                File.Delete(modelPath);
-            }
-
-            // 다운로드 확인
-            var result = MessageBox.Show(
-                $"AI 보정 모델을 다운로드합니다.\n\n" +
-                $"모델: {AI_MODEL_FILENAME}\n" +
-                $"크기: 약 1.5GB\n" +
-                $"저장 위치: {modelPath}\n\n" +
-                $"다운로드하시겠습니까?",
-                "AI 모델 다운로드",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-
-            if (result != MessageBoxResult.Yes)
-                return null;
-
-            // 다운로드 진행
-            using (var httpClient = new System.Net.Http.HttpClient())
-            {
-                httpClient.Timeout = TimeSpan.FromMinutes(30);
-                
-                using (var response = await httpClient.GetAsync(AI_MODEL_URL, System.Net.Http.HttpCompletionOption.ResponseHeadersRead))
-                {
-                    response.EnsureSuccessStatusCode();
-                    
-                    long? totalBytes = response.Content.Headers.ContentLength;
-                    
-                    using (var contentStream = await response.Content.ReadAsStreamAsync())
-                    using (var fileStream = new FileStream(modelPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true))
-                    {
-                        byte[] buffer = new byte[81920];
-                        long totalRead = 0;
-                        int bytesRead;
-                        
-                        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
-                        {
-                            await fileStream.WriteAsync(buffer, 0, bytesRead);
-                            totalRead += bytesRead;
-                            
-                            if (totalBytes.HasValue)
-                            {
-                                double percent = (double)totalRead / totalBytes.Value * 100;
-                                Dispatcher.Invoke(() =>
-                                {
-                                    AiStatusLabel.Text = $"모델 다운로드 중... {percent:F1}% ({totalRead / 1024 / 1024}MB / {totalBytes.Value / 1024 / 1024}MB)";
-                                    OcrProgressBar.Maximum = 100;
-                                    OcrProgressBar.Value = percent;
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-
-            Dispatcher.Invoke(() =>
-            {
-                AiStatusLabel.Text = "모델 다운로드 완료!";
-                OcrProgressBar.Value = 0;
-            });
-
-            return modelPath;
-        }
-
-        private async void ExecuteAiRefine_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrEmpty(OcrResultTextBox.Text))
-            {
-                MessageBox.Show("먼저 OCR을 실행하여 텍스트를 추출하세요.", "알림",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            // 모델 경로 결정: 커스텀 모델이 있으면 사용, 없으면 기본 모델 자동 다운로드
-            string modelToUse = aiModelPath;
-            
-            if (string.IsNullOrEmpty(modelToUse) || !File.Exists(modelToUse))
-            {
-                try
-                {
-                    AiStatusLabel.Text = "모델 확인 중...";
-                    modelToUse = await EnsureModelDownloaded();
-                    
-                    if (string.IsNullOrEmpty(modelToUse))
-                    {
-                        AiStatusLabel.Text = "모델 다운로드가 취소되었습니다.";
-                        return;
-                    }
-                    
-                    aiModelPath = modelToUse;
-                    AiModelPath.Text = AI_MODEL_FILENAME + " (자동)";
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"모델 다운로드 실패:\n{ex.Message}\n\n" +
-                        "수동으로 GGUF 모델을 선택해주세요.",
-                        "다운로드 오류", MessageBoxButton.OK, MessageBoxImage.Error);
-                    AiStatusLabel.Text = "다운로드 실패. 수동으로 모델을 선택하세요.";
-                    return;
-                }
-            }
-
-            string ocrText = OcrResultTextBox.Text;
-            
-            if (ocrText.Length > 3000)
-            {
-                ocrText = ocrText.Substring(0, 3000);
-                AiStatusLabel.Text = "텍스트가 길어 앞부분 3000자만 처리합니다.";
-            }
-
-            try
-            {
-                AiStatusLabel.Text = "AI 모델 로딩 중...";
-                
-                string refinedText = await Task.Run(() =>
-                {
-                    return RefineTextWithAi(ocrText);
-                });
-
-                OcrResultTextBox.Text = refinedText;
-                AiStatusLabel.Text = "AI 보정 완료!";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"AI 보정 중 오류:\n{ex.Message}", "오류",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-                AiStatusLabel.Text = "AI 보정 실패";
-            }
-        }
-
-        private async Task RunAiRefineAfterOcr(string ocrText)
-        {
-            if (string.IsNullOrWhiteSpace(ocrText)) return;
-
-            // 모델 확인/다운로드
-            string modelToUse = aiModelPath;
-            
-            if (string.IsNullOrEmpty(modelToUse) || !File.Exists(modelToUse))
-            {
-                try
-                {
-                    AiStatusLabel.Text = "AI 모델 확인 중...";
-                    modelToUse = await EnsureModelDownloaded();
-                    
-                    if (string.IsNullOrEmpty(modelToUse))
-                    {
-                        AiStatusLabel.Text = "AI 보정 건너뜀 (모델 다운로드 취소)";
-                        return;
-                    }
-                    
-                    aiModelPath = modelToUse;
-                    AiModelPath.Text = AI_MODEL_FILENAME + " (자동)";
-                }
-                catch (Exception ex)
-                {
-                    AiStatusLabel.Text = $"모델 다운로드 실패: {ex.Message}";
-                    return;
-                }
-            }
-
-            string textToRefine = ocrText;
-            if (textToRefine.Length > 3000)
-            {
-                textToRefine = textToRefine.Substring(0, 3000);
-            }
-
-            try
-            {
-                AiStatusLabel.Text = "AI 보정 중...";
-                
-                string refinedText = await Task.Run(() =>
-                {
-                    return RefineTextWithAi(textToRefine);
-                });
-
-                OcrResultTextBox.Text = refinedText;
-                AiStatusLabel.Text = "AI 보정 완료!";
-                OcrStatusLabel.Text = "OCR + AI 보정 완료!";
-            }
-            catch (Exception ex)
-            {
-                AiStatusLabel.Text = $"AI 보정 실패: {ex.Message}";
-                // OCR 결과는 이미 표시되어 있으므로 그대로 유지
-            }
-        }
-
-        private string RefineTextWithAi(string ocrRawText)
-        {
-            var parameters = new ModelParams(aiModelPath)
-            {
-                ContextSize = 4096,
-                GpuLayerCount = 0  // CPU 전용 (GPU 사용 시 값 증가)
-            };
-
-            using (var model = LLamaWeights.LoadFromFile(parameters))
-            using (var context = model.CreateContext(parameters))
-            {
-                var executor = new LLama.StatelessExecutor(model, parameters);
-
-                string prompt = $@"<start_of_turn>user
-다음 OCR 텍스트의 오타를 수정하고 읽기 쉽게 정리하세요. 원본 의미를 유지하세요. 정리된 텍스트만 출력하세요.
-
-{ocrRawText}
-<end_of_turn>
-<start_of_turn>model
-";
-
-                var inferenceParams = new InferenceParams()
-                {
-                    MaxTokens = 2048,
-                    AntiPrompts = new List<string> { "<end_of_turn>", "<start_of_turn>", "User:", "user\n" }
-                };
-
-                var result = new System.Text.StringBuilder();
-                
-                var asyncEnum = executor.InferAsync(prompt, inferenceParams);
-                var enumerator = asyncEnum.GetAsyncEnumerator();
-                try
-                {
-                    while (enumerator.MoveNextAsync().AsTask().GetAwaiter().GetResult())
-                    {
-                        result.Append(enumerator.Current);
-                        
-                        Dispatcher.Invoke(() =>
-                        {
-                            AiStatusLabel.Text = $"AI 생성 중... ({result.Length}자)";
-                        });
-                    }
-                }
-                finally
-                {
-                    enumerator.DisposeAsync().AsTask().GetAwaiter().GetResult();
-                }
-
-                // 결과에서 불필요한 태그/프롬프트 잔여물 제거
-                string cleanResult = result.ToString().Trim();
-                cleanResult = cleanResult.Replace("<end_of_turn>", "").Replace("<start_of_turn>", "").Trim();
-                
-                return cleanResult;
             }
         }
 

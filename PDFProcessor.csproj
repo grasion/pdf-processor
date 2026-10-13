@@ -2,8 +2,10 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <StartupObject>PDFProcessor.Program</StartupObject>
     <TargetFramework>net6.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <DefaultItemExcludes>$(DefaultItemExcludes);.verification\**</DefaultItemExcludes>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>9040508_filetype_pdf_icon.ico</ApplicationIcon>
     <AssemblyName>PDF통합처리기</AssemblyName>
@@ -17,9 +19,9 @@
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
     
     <!-- 버전 정보 -->
-    <Version>1.0.7</Version>
-    <AssemblyVersion>1.0.7.0</AssemblyVersion>
-    <FileVersion>1.0.7.0</FileVersion>
+    <Version>1.0.8</Version>
+    <AssemblyVersion>1.0.8.0</AssemblyVersion>
+    <FileVersion>1.0.8.0</FileVersion>
     <Company>PDF Tools</Company>
     <Product>PDF 통합 처리기</Product>
     <Copyright>Copyright © 2024</Copyright>
@@ -27,27 +29,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3856.49" />
+    <Compile Remove="tests\**\*.cs" />
     <PackageReference Include="PDFsharp" Version="6.1.1" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
     <PackageReference Include="PdfiumViewer" Version="2.13.0" />
     <PackageReference Include="PdfiumViewer.Native.x86_64.v8-xfa" Version="2018.4.8.256" />
-    <PackageReference Include="QRCoder" Version="1.6.0" />
     <PackageReference Include="Velopack" Version="0.0.1298" />
-    <PackageReference Include="Sdcb.PaddleInference" Version="3.0.0" />
-    <PackageReference Include="Sdcb.PaddleOCR" Version="3.0.0" />
-    <PackageReference Include="Sdcb.PaddleOCR.Models.Online" Version="3.0.0" />
-    <PackageReference Include="Sdcb.PaddleInference.runtime.win64.mkl" Version="2.6.1" />
-    <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
-    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.11.0.20250507" />
-    <PackageReference Include="LLamaSharp" Version="0.19.0" />
-    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.19.0" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="9040508_filetype_pdf_icon.ico" />
     <EmbeddedResource Include="9040508_filetype_pdf_icon.png" />
-    <EmbeddedResource Include="coffee_qr.png" />
   </ItemGroup>
 
   <!-- tip.html을 임베디드 리소스로 포함 -->

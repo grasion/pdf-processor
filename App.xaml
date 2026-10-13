@@ -3,6 +3,55 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="#F1F5FA"/>
+            <Setter Property="Foreground" Value="#243247"/>
+            <Setter Property="BorderBrush" Value="#DCE2EB"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#0078D7"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.75"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="GroupBox">
+            <Setter Property="BorderBrush" Value="#DCE2EB"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="Foreground" Value="#243247"/>
+        </Style>
+        <Style TargetType="TabItem">
+            <Setter Property="Padding" Value="20,10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="BorderBrush" Value="#DCE2EB"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
     </Application.Resources>
 </Application>

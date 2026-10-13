@@ -25,6 +25,9 @@ github_token.txt
 # Python
 __pycache__/
 *.pyc
+.verification/
+tests/**/bin/
+tests/**/obj/
 
 # 기타
 merged_document*
