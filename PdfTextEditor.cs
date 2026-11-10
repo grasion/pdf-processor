@@ -25,6 +25,15 @@ namespace PDFProcessor
         internal Dictionary<string, string> ReverseGlyphs;
         internal int[] UnicodeLengths;
         internal int[] CodeLengths;
+        /// <summary>Non-stroking colour in effect when the text was drawn.</summary>
+        internal System.Drawing.Color FillColor = System.Drawing.Color.Black;
+        /// <summary>PDF text render mode (3 and 7 draw no visible glyphs, e.g. OCR text layers).</summary>
+        internal int RenderMode;
+        internal bool IsInvisible => RenderMode == 3 || RenderMode == 7;
+        /// <summary>Font size in points after the text and graphics matrices are applied (0 when unknown).</summary>
+        internal double EffectiveFontSize;
+        /// <summary>Reading direction on screen, counter-clockwise degrees snapped to 0/90/180/270.</summary>
+        internal int VisualAngle;
     }
 
     internal sealed partial class PdfTextEditor
@@ -66,18 +75,35 @@ namespace PDFProcessor
             string currentFont = null;
             double currentSize = 12;
             double currentCharacterSpacing = 0, currentWordSpacing = 0;
-            var stack = new Stack<(string Font, double Size, double Character, double Word)>();
+            var currentColor = System.Drawing.Color.Black;
+            int currentMode = 0;
+            int pageRotation = page.Elements.GetInteger("/Rotate");
+            // Linear parts (a, b, c, d) of the current transformation matrix and the text matrix.
+            var ctm = (A: 1.0, B: 0.0, C: 0.0, D: 1.0);
+            var textMatrix = (A: 1.0, B: 0.0, C: 0.0, D: 1.0);
+            var stack = new Stack<(string Font, double Size, double Character, double Word, System.Drawing.Color Color, int Mode,
+                (double A, double B, double C, double D) Ctm)>();
             foreach (var item in sequence)
             {
                 if (item is not COperator op) continue;
-                if (op.Name == "q") stack.Push((currentFont, currentSize, currentCharacterSpacing, currentWordSpacing));
+                if (op.Name == "q") stack.Push((currentFont, currentSize, currentCharacterSpacing, currentWordSpacing, currentColor, currentMode, ctm));
+                else if (op.Name == "cm" && op.Operands.Count == 6)
+                    ctm = Multiply((ContentNumber(op.Operands[0]), ContentNumber(op.Operands[1]),
+                        ContentNumber(op.Operands[2]), ContentNumber(op.Operands[3])), ctm);
+                else if (op.Name == "BT") textMatrix = (1, 0, 0, 1);
+                else if (op.Name == "Tm" && op.Operands.Count == 6)
+                    textMatrix = (ContentNumber(op.Operands[0]), ContentNumber(op.Operands[1]),
+                        ContentNumber(op.Operands[2]), ContentNumber(op.Operands[3]));
                 else if (op.Name == "Q" && stack.Count > 0)
                 {
                     var state = stack.Pop();
+                    ctm = state.Ctm;
                     currentFont = state.Font;
                     currentSize = state.Size;
                     currentCharacterSpacing = state.Character;
                     currentWordSpacing = state.Word;
+                    currentColor = state.Color;
+                    currentMode = state.Mode;
                 }
                 else if (op.Name == "Tf" && op.Operands.Count > 0 && op.Operands[0] is CName name)
                 {
@@ -92,6 +118,13 @@ namespace PDFProcessor
                     if (op.Name == "Tc") currentCharacterSpacing = spacing;
                     else currentWordSpacing = spacing;
                 }
+                else if (op.Name == "Tr" && op.Operands.Count > 0) currentMode = (int)ContentNumber(op.Operands[0]);
+                else if (op.Name == "g" || op.Name == "rg" || op.Name == "k" || op.Name == "sc" || op.Name == "scn")
+                {
+                    var color = ParseColor(op);
+                    if (color.HasValue) currentColor = color.Value;
+                }
+                else if (op.Name == "cs") currentColor = System.Drawing.Color.Black;
                 else if ((op.Name == "Tj" || op.Name == "TJ" || op.Name == "'" || op.Name == "\"") &&
                     currentFont != null && fonts != null)
                 {
@@ -112,7 +145,9 @@ namespace PDFProcessor
                         FontKey = currentFont, GlyphWidths = fontData.Widths,
                         CharacterSpacing = currentCharacterSpacing, WordSpacing = currentWordSpacing,
                         ReverseGlyphs = fontData.Reverse, UnicodeLengths = fontData.UnicodeLengths,
-                        CodeLengths = fontData.CodeLengths });
+                        CodeLengths = fontData.CodeLengths, FillColor = currentColor, RenderMode = currentMode,
+                        EffectiveFontSize = EffectiveSize(currentSize, textMatrix, ctm),
+                        VisualAngle = VisualAngleOf(textMatrix, ctm, pageRotation) });
                 }
             }
             contents[pageIndex] = sequence;
@@ -152,6 +187,44 @@ namespace PDFProcessor
                 index += code.Length;
             }
             return result;
+        }
+
+        private static (double A, double B, double C, double D) Multiply(
+            (double A, double B, double C, double D) first, (double A, double B, double C, double D) second) =>
+            (first.A * second.A + first.B * second.C, first.A * second.B + first.B * second.D,
+             first.C * second.A + first.D * second.C, first.C * second.B + first.D * second.D);
+
+        private static double EffectiveSize(double size, (double A, double B, double C, double D) text, (double A, double B, double C, double D) ctm)
+        {
+            var matrix = Multiply(text, ctm);
+            return size * Math.Sqrt(matrix.C * matrix.C + matrix.D * matrix.D);
+        }
+
+        private static int VisualAngleOf((double A, double B, double C, double D) text, (double A, double B, double C, double D) ctm, int pageRotation)
+        {
+            var matrix = Multiply(text, ctm);
+            double angle = Math.Atan2(matrix.B, matrix.A) * 180 / Math.PI - pageRotation;
+            int snapped = (int)Math.Round(angle / 90) * 90;
+            return ((snapped % 360) + 360) % 360;
+        }
+
+        private static System.Drawing.Color? ParseColor(COperator op)
+        {
+            if (op.Operands.Count == 0 || op.Operands.Any(operand => operand is not CInteger && operand is not CReal)) return null;
+            double Channel(int index) => Math.Clamp(ContentNumber(op.Operands[index]), 0, 1);
+            int Byte(double value) => (int)Math.Round(Math.Clamp(value, 0, 1) * 255);
+            switch (op.Operands.Count)
+            {
+                case 1: { int gray = Byte(Channel(0)); return System.Drawing.Color.FromArgb(gray, gray, gray); }
+                case 3: return System.Drawing.Color.FromArgb(Byte(Channel(0)), Byte(Channel(1)), Byte(Channel(2)));
+                case 4:
+                {
+                    double black = Channel(3);
+                    return System.Drawing.Color.FromArgb(Byte((1 - Channel(0)) * (1 - black)),
+                        Byte((1 - Channel(1)) * (1 - black)), Byte((1 - Channel(2)) * (1 - black)));
+                }
+                default: return null;
+            }
         }
 
         private static double ContentNumber(CObject value) => value is CInteger integer ? integer.Value : value is CReal real ? real.Value : 0;

@@ -20,13 +20,13 @@ namespace PDFProcessor
     public partial class MainWindow : Window
     {
         // 버전 정보
-        private const string APP_VERSION = "1.0.9";
+        private const string APP_VERSION = "1.1.0";
         private const string APP_NAME = "PDF 통합 처리기";
         private const string APP_COPYRIGHT = "Copyright © 2024";
-        
+
         // 업데이트 관리자
         private UpdateManager? _updateManager;
-        
+
         // 분할 관련 변수
         private string splitPdfPath = "";
         private string splitOutputFolder = "";
@@ -51,12 +51,14 @@ namespace PDFProcessor
 
         public MainWindow()
         {
+            Resources["AppVersionText"] = $"버전 {APP_VERSION}";
             InitializeComponent();
+            Title = $"{APP_NAME} v{APP_VERSION}";
             ExtractPdfiumDll();
             SetWindowIcon();
             InitializeDefaults();
             InitializeInlineEditing();
-            
+
             // 업데이트 확인 (비동기)
             _ = CheckForUpdatesAsync();
         }
@@ -67,7 +69,7 @@ namespace PDFProcessor
             try
             {
                 string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "pdfium.dll");
-                
+
                 // DLL이 이미 존재하면 건너뛰기
                 if (File.Exists(dllPath))
                 {
@@ -104,7 +106,7 @@ namespace PDFProcessor
                 var assembly = System.Reflection.Assembly.GetExecutingAssembly();
                 string iconResourceName = assembly.GetManifestResourceNames()
                     .FirstOrDefault(r => r.EndsWith("9040508_filetype_pdf_icon.ico"));
-                
+
                 if (iconResourceName != null)
                 {
                     using (Stream stream = assembly.GetManifestResourceStream(iconResourceName))
@@ -117,7 +119,7 @@ namespace PDFProcessor
                             {
                                 stream.CopyTo(fileStream);
                             }
-                            
+
                             this.Icon = new BitmapImage(new Uri(tempIconPath, UriKind.Absolute));
                             System.Diagnostics.Debug.WriteLine("아이콘 로드 완료");
                         }
@@ -140,7 +142,7 @@ namespace PDFProcessor
 
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
             MergeFileName.Text = $"병합_{timestamp}.pdf";
-            
+
             // 변환 기본값 설정
             ConvertFileNamePattern.Text = "{filename}_page_{page}";
         }
@@ -221,9 +223,10 @@ namespace PDFProcessor
                 TextBlock featureList = new TextBlock
                 {
                     Text = "• PDF 분할 (페이지 범위, 개별, 단위)\n" +
-                           "• PDF 병합 (PDF + 이미지)\n" +
+                           "• PDF 병합 (PDF + 이미지 + 워드·엑셀·파워포인트)\n" +
                            "• PDF → 이미지 변환 (PNG, JPG, BMP, TIFF)\n" +
-                           "• PDF 텍스트 수정 (원본 글꼴 유지)\n" +
+                           "• PDF 텍스트 수정 (원본 글꼴 유지, 없는 글자는 대체 글꼴)\n" +
+                           "• 스캔 PDF OCR 인식 후 수정 (Windows 내장 OCR)\n" +
                            "• 실시간 미리보기\n" +
                            "• 드래그 앤 드롭 지원",
                     FontSize = 12,
@@ -260,15 +263,15 @@ aboutWindow.Content = panel;
             try
             {
                 var source = new GithubSource(
-                    "https://github.com/grasion/pdf-processor", 
+                    "https://github.com/grasion/pdf-processor",
                     null, // 토큰 (public 저장소는 불필요)
                     false // prerelease 포함 여부
                 );
-                
+
                 _updateManager = new UpdateManager(source);
-                
+
                 var updateInfo = await _updateManager.CheckForUpdatesAsync();
-                
+
                 if (updateInfo != null)
                 {
                     var result = MessageBox.Show(
@@ -277,7 +280,7 @@ aboutWindow.Content = panel;
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Question
                     );
-                    
+
                     if (result == MessageBoxResult.Yes)
                     {
                         // 진행률 표시 (간단한 메시지)
@@ -291,13 +294,13 @@ aboutWindow.Content = panel;
                             ResizeMode = ResizeMode.NoResize,
                             WindowStyle = WindowStyle.ToolWindow
                         };
-                        
+
                         var progressPanel = new StackPanel
                         {
                             Margin = new Thickness(20),
                             VerticalAlignment = VerticalAlignment.Center
                         };
-                        
+
                         progressPanel.Children.Add(new TextBlock
                         {
                             Text = "업데이트를 다운로드하는 중...",
@@ -305,28 +308,28 @@ aboutWindow.Content = panel;
                             HorizontalAlignment = HorizontalAlignment.Center,
                             Margin = new Thickness(0, 0, 0, 20)
                         });
-                        
+
                         var progressBar = new ProgressBar
                         {
                             IsIndeterminate = true,
                             Height = 20
                         };
                         progressPanel.Children.Add(progressBar);
-                        
+
                         progressWindow.Content = progressPanel;
                         progressWindow.Show();
-                        
+
                         await _updateManager.DownloadUpdatesAsync(updateInfo);
-                        
+
                         progressWindow.Close();
-                        
+
                         MessageBox.Show(
                             "업데이트가 다운로드되었습니다.\n프로그램을 재시작합니다.",
                             "업데이트 완료",
                             MessageBoxButton.OK,
                             MessageBoxImage.Information
                         );
-                        
+
                         _updateManager.ApplyUpdatesAndRestart(updateInfo);
                     }
                 }
@@ -348,17 +351,17 @@ aboutWindow.Content = panel;
                     MessageBoxButton.OK,
                     MessageBoxImage.Information
                 );
-                
+
                 var source = new GithubSource(
-                    "https://github.com/grasion/pdf-processor", 
+                    "https://github.com/grasion/pdf-processor",
                     null,
                     false
                 );
-                
+
                 _updateManager = new UpdateManager(source);
-                
+
                 var updateInfo = await _updateManager.CheckForUpdatesAsync();
-                
+
                 if (updateInfo != null)
                 {
                     var result = MessageBox.Show(
@@ -367,18 +370,18 @@ aboutWindow.Content = panel;
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Question
                     );
-                    
+
                     if (result == MessageBoxResult.Yes)
                     {
                         await _updateManager.DownloadUpdatesAsync(updateInfo);
-                        
+
                         MessageBox.Show(
                             "업데이트가 다운로드되었습니다.\n프로그램을 재시작합니다.",
                             "업데이트 완료",
                             MessageBoxButton.OK,
                             MessageBoxImage.Information
                         );
-                        
+
                         _updateManager.ApplyUpdatesAndRestart(updateInfo);
                     }
                 }
@@ -452,7 +455,7 @@ aboutWindow.Content = panel;
                     }
                     else
                     {
-                        MessageBox.Show("PDF 파일만 선택할 수 있습니다.", "오류", 
+                        MessageBox.Show("PDF 파일만 선택할 수 있습니다.", "오류",
                             MessageBoxButton.OK, MessageBoxImage.Warning);
                     }
                 }
@@ -529,33 +532,70 @@ aboutWindow.Content = panel;
 
                 // 썸네일 로드
                 LoadSplitThumbnails();
-                
+
                 ShowSplitPreviewPage();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"PDF 미리보기 로드 실패:\n{ex.Message}", "오류", 
+                MessageBox.Show($"PDF 미리보기 로드 실패:\n{ex.Message}", "오류",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private void LoadSplitThumbnails()
+        private int splitThumbnailVersion;
+
+        private async void LoadSplitThumbnails()
         {
+            int version = ++splitThumbnailVersion;
             SplitPageThumbnailList.Items.Clear();
-            
-            for (int i = 0; i < splitTotalPages; i++)
+            await LoadThumbnailsAsync(splitPdfPath, splitTotalPages, SplitPageThumbnailList, () => version == splitThumbnailVersion);
+        }
+
+        /// <summary>Renders thumbnails off the UI thread in small batches so large PDFs stay responsive.</summary>
+        private async Task LoadThumbnailsAsync(string path, int pageCount, ListBox target, Func<bool> isCurrent)
+        {
+            const int batchSize = 6;
+            for (int start = 0; start < pageCount; start += batchSize)
             {
-                try
+                int first = start, count = Math.Min(batchSize, pageCount - start);
+                List<SimplePageInfo> batch;
+                try { batch = await Task.Run(() => RenderThumbnailBatch(path, first, count)); }
+                catch { return; }
+                if (!isCurrent()) return;
+                foreach (var item in batch) target.Items.Add(item);
+            }
+        }
+
+        private List<SimplePageInfo> RenderThumbnailBatch(string path, int first, int count)
+        {
+            var result = new List<SimplePageInfo>();
+            using var document = PdfiumViewer.PdfDocument.Load(path);
+            for (int index = first; index < first + count && index < document.PageCount; index++)
+                result.Add(new SimplePageInfo
                 {
-                    var thumbnail = RenderPdfPageToImageFromFile(splitPdfPath, i, 72);
-                    SplitPageThumbnailList.Items.Add(new SimplePageInfo
-                    {
-                        PageIndex = i,
-                        Thumbnail = thumbnail,
-                        PageLabel = $"페이지 {i + 1}"
-                    });
-                }
-                catch { }
+                    PageIndex = index,
+                    Thumbnail = RenderPage(document, index, 72, 240, 320),
+                    PageLabel = $"페이지 {index + 1}"
+                });
+            return result;
+        }
+
+        /// <summary>Renders one page of an open document; the result is frozen and can cross threads.</summary>
+        private BitmapSource RenderPage(PdfiumViewer.PdfDocument document, int pageIndex, int dpi, int maxWidth, int maxHeight)
+        {
+            try
+            {
+                var page = document.PageSizes[pageIndex];
+                double scale = Math.Min(dpi / 72.0, Math.Min(maxWidth / page.Width, maxHeight / page.Height));
+                int width = Math.Max(1, (int)(page.Width * scale));
+                int height = Math.Max(1, (int)(page.Height * scale));
+                using var image = document.Render(pageIndex, width, height, 96, 96, PdfiumViewer.PdfRenderFlags.Annotations);
+                using var bitmap = new System.Drawing.Bitmap(image);
+                return ConvertBitmapToBitmapSource(bitmap);
+            }
+            catch (Exception ex)
+            {
+                return CreateErrorImage($"미리보기 오류:\n{ex.Message}");
             }
         }
 
@@ -571,7 +611,7 @@ aboutWindow.Content = panel;
         private void SplitPreview_MouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
         {
             if (splitTotalPages == 0) return;
-            
+
             if (e.Delta > 0 && splitCurrentPage > 0)
             {
                 splitCurrentPage--;
@@ -593,7 +633,7 @@ aboutWindow.Content = panel;
             try
             {
                 // PDF 페이지를 이미지로 렌더링
-                var image = RenderPdfPageToImageFromFile(splitPdfPath, splitCurrentPage);
+                var image = RenderPdfPageToImageFromFile(splitPdfPath, splitCurrentPage, 200);
                 if (image != null)
                 {
                     SplitPreviewImage.Source = image;
@@ -602,7 +642,7 @@ aboutWindow.Content = panel;
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"미리보기 표시 오류:\n{ex.Message}", "오류", 
+                MessageBox.Show($"미리보기 표시 오류:\n{ex.Message}", "오류",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -629,7 +669,7 @@ aboutWindow.Content = panel;
         {
             if (string.IsNullOrEmpty(splitPdfPath))
             {
-                MessageBox.Show("PDF 파일을 먼저 선택하세요.", "오류", 
+                MessageBox.Show("PDF 파일을 먼저 선택하세요.", "오류",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -656,8 +696,8 @@ aboutWindow.Content = panel;
                     {
                         PdfSharp.Pdf.PdfDocument outputDoc = new PdfSharp.Pdf.PdfDocument();
                         outputDoc.AddPage(inputDoc.Pages[i]);
-                        
-                        string outputPath = Path.Combine(splitOutputFolder, 
+
+                        string outputPath = Path.Combine(splitOutputFolder,
                             $"{baseName}_page_{i + 1}.pdf");
                         outputDoc.Save(outputPath);
                         outputDoc.Dispose();
@@ -673,7 +713,7 @@ aboutWindow.Content = panel;
                     // 페이지 단위로 분할
                     if (!int.TryParse(SplitChunkSize.Text, out int chunkSize) || chunkSize <= 0)
                     {
-                        MessageBox.Show("페이지 단위를 올바르게 입력하세요.", "오류", 
+                        MessageBox.Show("페이지 단위를 올바르게 입력하세요.", "오류",
                             MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
@@ -693,7 +733,7 @@ aboutWindow.Content = panel;
                         }
 
                         fileCount++;
-                        string outputPath = Path.Combine(splitOutputFolder, 
+                        string outputPath = Path.Combine(splitOutputFolder,
                             $"{baseName}_part_{fileCount}_pages_{start + 1}-{end}.pdf");
                         outputDoc.Save(outputPath);
                         outputDoc.Dispose();
@@ -707,10 +747,10 @@ aboutWindow.Content = panel;
                 else
                 {
                     // 페이지 범위로 분할
-                    if (!int.TryParse(SplitStartPage.Text, out int startPage) || 
+                    if (!int.TryParse(SplitStartPage.Text, out int startPage) ||
                         !int.TryParse(SplitEndPage.Text, out int endPage))
                     {
-                        MessageBox.Show("페이지 번호를 올바르게 입력하세요.", "오류", 
+                        MessageBox.Show("페이지 번호를 올바르게 입력하세요.", "오류",
                             MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
@@ -718,7 +758,7 @@ aboutWindow.Content = panel;
                     startPage--; // 0-based index
                     if (startPage < 0 || endPage > totalPages || startPage >= endPage)
                     {
-                        MessageBox.Show($"잘못된 페이지 범위입니다.\n전체 페이지 수: {totalPages}", "오류", 
+                        MessageBox.Show($"잘못된 페이지 범위입니다.\n전체 페이지 수: {totalPages}", "오류",
                             MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
@@ -734,7 +774,7 @@ aboutWindow.Content = panel;
                         SplitStatusLabel.Text = $"페이지 {i + 1} 처리 중... ({i - startPage + 1}/{pageCount})";
                     }
 
-                    string outputPath = Path.Combine(splitOutputFolder, 
+                    string outputPath = Path.Combine(splitOutputFolder,
                         $"{baseName}_pages_{startPage + 1}-{endPage}.pdf");
                     outputDoc.Save(outputPath);
                     outputDoc.Dispose();
@@ -743,12 +783,12 @@ aboutWindow.Content = panel;
                 }
 
                 inputDoc.Dispose();
-                MessageBox.Show($"PDF 분할이 완료되었습니다.\n출력 폴더: {splitOutputFolder}", "완료", 
+                MessageBox.Show($"PDF 분할이 완료되었습니다.\n출력 폴더: {splitOutputFolder}", "완료",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"PDF 분할 중 오류가 발생했습니다:\n{ex.Message}", "오류", 
+                MessageBox.Show($"PDF 분할 중 오류가 발생했습니다:\n{ex.Message}", "오류",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -779,70 +819,103 @@ aboutWindow.Content = panel;
             e.Handled = false; // 이벤트 전파 허용
         }
 
-        private void MergeDropZone_Drop(object sender, DragEventArgs e)
+        private async void MergeDropZone_Drop(object sender, DragEventArgs e)
         {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                if (files != null && files.Length > 0)
-                {
-                    int addedCount = 0;
-                    foreach (string file in files)
-                    {
-                        string ext = Path.GetExtension(file).ToLower();
-                        // PDF 및 이미지 파일만 허용
-                        if (ext == ".pdf" || ext == ".png" || ext == ".jpg" || 
-                            ext == ".jpeg" || ext == ".bmp" || ext == ".tiff" || ext == ".gif")
-                        {
-                            if (!mergeFiles.Contains(file))
-                            {
-                                mergeFiles.Add(file);
-                                MergeFileList.Items.Add(Path.GetFileName(file));
-                                addedCount++;
-                            }
-                        }
-                    }
-
-                    if (addedCount > 0)
-                    {
-                        MergeStatusLabel.Text = $"{mergeFiles.Count}개의 파일이 준비되었습니다.";
-                        LoadAllMergePages(); // 모든 페이지 로드
-                    }
-                    else if (files.Length > 0)
-                    {
-                        MessageBox.Show("PDF 또는 이미지 파일만 추가할 수 있습니다.\n지원 형식: PDF, PNG, JPG, BMP, TIFF, GIF", 
-                            "알림", MessageBoxButton.OK, MessageBoxImage.Information);
-                    }
-                }
-            }
+            if (e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+                await AddMergeFilesAsync(files);
         }
 
-        private void AddMergeFiles_Click(object sender, RoutedEventArgs e)
-        {
-            OpenFileDialog dialog = new OpenFileDialog
-            {
-                Filter = "지원 파일|*.pdf;*.png;*.jpg;*.jpeg;*.bmp;*.tiff;*.gif|" +
-                        "PDF 파일|*.pdf|이미지 파일|*.png;*.jpg;*.jpeg;*.bmp;*.tiff;*.gif",
-                Title = "병합할 파일 선택 (PDF, 이미지만 지원)",
-                Multiselect = true
-            };
+        private const string MergeFileFilter =
+            "지원 파일|*.pdf;*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff;*.gif;*.doc;*.docx;*.docm;*.rtf;*.odt;*.xls;*.xlsx;*.xlsm;*.xlsb;*.csv;*.ods;*.ppt;*.pptx;*.pptm;*.odp|" +
+            "PDF 파일|*.pdf|이미지 파일|*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff;*.gif|" +
+            "워드 문서|*.doc;*.docx;*.docm;*.rtf;*.odt|엑셀 문서|*.xls;*.xlsx;*.xlsm;*.xlsb;*.csv;*.ods|" +
+            "파워포인트 문서|*.ppt;*.pptx;*.pptm;*.odp";
 
-            if (dialog.ShowDialog() == true)
+        private static readonly string[] MergeImageExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".gif" };
+        // Office document -> converted PDF in the conversion cache.
+        private readonly Dictionary<string, string> mergeConverted = new(StringComparer.OrdinalIgnoreCase);
+        private bool mergeConverting;
+
+        private static bool IsMergeSupported(string path)
+        {
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            return ext == ".pdf" || MergeImageExtensions.Contains(ext) || OfficeConverter.IsOfficeFile(path);
+        }
+
+        /// <summary>The file that is actually merged: the converted PDF for Office documents.</summary>
+        private string MergeSourcePath(string file) =>
+            mergeConverted.TryGetValue(file, out var pdf) ? pdf : file;
+
+        /// <summary>Adds PDFs, images and Office documents; Office documents are converted to PDF in the background.</summary>
+        private async Task AddMergeFilesAsync(IEnumerable<string> candidates)
+        {
+            var files = candidates.Where(File.Exists).ToList();
+            if (mergeConverting)
             {
-                foreach (string file in dialog.FileNames)
+                MessageBox.Show(this, "문서를 PDF로 변환하는 중입니다. 변환이 끝난 뒤 다시 추가해 주세요.", "알림",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var added = files.Where(IsMergeSupported)
+                .Where(file => !mergeFiles.Contains(file, StringComparer.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (added.Count == 0)
+            {
+                if (files.Any(file => !IsMergeSupported(file)))
+                    MessageBox.Show(this, "PDF, 이미지, 워드, 엑셀, 파워포인트 파일만 추가할 수 있습니다.\n" +
+                        "지원 형식: PDF, PNG, JPG, BMP, TIFF, GIF, DOC(X), XLS(X), CSV, PPT(X)",
+                        "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var failures = new List<string>();
+            var toConvert = added.Where(file => OfficeConverter.IsOfficeFile(file) && !mergeConverted.ContainsKey(file)).ToList();
+            if (toConvert.Count > 0)
+            {
+                mergeConverting = true;
+                MergeProgressBar.IsIndeterminate = true;
+                try
                 {
-                    if (!mergeFiles.Contains(file))
+                    for (int index = 0; index < toConvert.Count; index++)
                     {
-                        mergeFiles.Add(file);
-                        MergeFileList.Items.Add(Path.GetFileName(file));
+                        string file = toConvert[index];
+                        MergeStatusLabel.Text = $"{OfficeConverter.KindName(file)}를 PDF로 변환 중… ({index + 1}/{toConvert.Count}) {Path.GetFileName(file)}";
+                        try { mergeConverted[file] = await Task.Run(() => OfficeConverter.ConvertToPdf(file)); }
+                        catch (Exception ex)
+                        {
+                            failures.Add($"• {Path.GetFileName(file)}\n   {ex.Message}");
+                            added.Remove(file);
+                        }
                     }
                 }
-
-                MergeStatusLabel.Text = $"{mergeFiles.Count}개의 파일이 준비되었습니다.";
-                
-                // 모든 페이지 로드 및 미리보기 업데이트
-                LoadAllMergePages();
+                finally
+                {
+                    mergeConverting = false;
+                    MergeProgressBar.IsIndeterminate = false;
+                }
             }
+
+            foreach (string file in added)
+            {
+                mergeFiles.Add(file);
+                MergeFileList.Items.Add(Path.GetFileName(file));
+            }
+            MergeStatusLabel.Text = mergeFiles.Count > 0 ? $"{mergeFiles.Count}개의 파일이 준비되었습니다." : "병합할 파일을 추가하세요.";
+            if (added.Count > 0) LoadAllMergePages();
+            if (failures.Count > 0)
+                MessageBox.Show(this, "다음 파일은 PDF로 변환하지 못해 추가하지 않았습니다.\n\n" + string.Join("\n", failures),
+                    "문서 변환 실패", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        private async void AddMergeFiles_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog
+            {
+                Filter = MergeFileFilter,
+                Title = "병합할 파일 선택 (PDF, 이미지, 워드, 엑셀, 파워포인트)",
+                Multiselect = true
+            };
+            if (dialog.ShowDialog() == true) await AddMergeFilesAsync(dialog.FileNames);
         }
 
         private void MoveUp_Click(object sender, RoutedEventArgs e)
@@ -888,11 +961,11 @@ aboutWindow.Content = panel;
             {
                 mergeFiles.RemoveAt(index);
                 MergeFileList.Items.RemoveAt(index);
-                
-                MergeStatusLabel.Text = mergeFiles.Count > 0 
-                    ? $"{mergeFiles.Count}개의 파일이 준비되었습니다." 
+
+                MergeStatusLabel.Text = mergeFiles.Count > 0
+                    ? $"{mergeFiles.Count}개의 파일이 준비되었습니다."
                     : "병합할 PDF 파일들을 추가하세요.";
-                
+
                 // 모든 페이지 다시 로드
                 if (mergeFiles.Count > 0)
                 {
@@ -918,11 +991,11 @@ aboutWindow.Content = panel;
             allPages.Clear();
             selectedPageIndices.Clear();
             currentPreviewPageIndex = 0;
-            
+
             MergePageThumbnailList.Items.Clear();
             MergePreviewImage.Source = null;
             MergePageInfo.Text = "페이지: 0 / 0";
-            
+
             MergeStatusLabel.Text = "병합할 PDF 파일들을 추가하세요.";
         }
 
@@ -954,19 +1027,19 @@ aboutWindow.Content = panel;
         private void RotateLeft_Click(object sender, RoutedEventArgs e)
         {
             if (allPages.Count == 0) return;
-            
+
             // 선택된 페이지가 있으면 선택된 페이지들 회전, 없으면 현재 페이지만 회전
-            var pagesToRotate = selectedPageIndices.Count > 0 
-                ? selectedPageIndices.ToList() 
+            var pagesToRotate = selectedPageIndices.Count > 0
+                ? selectedPageIndices.ToList()
                 : new List<int> { currentPreviewPageIndex };
-            
+
             foreach (int pageIndex in pagesToRotate)
             {
                 int currentRotation = pageRotations.ContainsKey(pageIndex) ? pageRotations[pageIndex] : 0;
                 int newRotation = (currentRotation - 90 + 360) % 360;
                 pageRotations[pageIndex] = newRotation;
             }
-            
+
             // 미리보기 및 썸네일 업데이트
             ShowPreviewPage(currentPreviewPageIndex);
             UpdateThumbnailList();
@@ -975,18 +1048,18 @@ aboutWindow.Content = panel;
         private void RotateRight_Click(object sender, RoutedEventArgs e)
         {
             if (allPages.Count == 0) return;
-            
-            var pagesToRotate = selectedPageIndices.Count > 0 
-                ? selectedPageIndices.ToList() 
+
+            var pagesToRotate = selectedPageIndices.Count > 0
+                ? selectedPageIndices.ToList()
                 : new List<int> { currentPreviewPageIndex };
-            
+
             foreach (int pageIndex in pagesToRotate)
             {
                 int currentRotation = pageRotations.ContainsKey(pageIndex) ? pageRotations[pageIndex] : 0;
                 int newRotation = (currentRotation + 90) % 360;
                 pageRotations[pageIndex] = newRotation;
             }
-            
+
             ShowPreviewPage(currentPreviewPageIndex);
             UpdateThumbnailList();
         }
@@ -994,18 +1067,18 @@ aboutWindow.Content = panel;
         private void Rotate180_Click(object sender, RoutedEventArgs e)
         {
             if (allPages.Count == 0) return;
-            
-            var pagesToRotate = selectedPageIndices.Count > 0 
-                ? selectedPageIndices.ToList() 
+
+            var pagesToRotate = selectedPageIndices.Count > 0
+                ? selectedPageIndices.ToList()
                 : new List<int> { currentPreviewPageIndex };
-            
+
             foreach (int pageIndex in pagesToRotate)
             {
                 int currentRotation = pageRotations.ContainsKey(pageIndex) ? pageRotations[pageIndex] : 0;
                 int newRotation = (currentRotation + 180) % 360;
                 pageRotations[pageIndex] = newRotation;
             }
-            
+
             ShowPreviewPage(currentPreviewPageIndex);
             UpdateThumbnailList();
         }
@@ -1025,17 +1098,17 @@ aboutWindow.Content = panel;
         private BitmapSource RotateBitmapSource(BitmapSource source, int angle)
         {
             if (angle == 0) return source;
-            
+
             TransformedBitmap transformedBitmap = new TransformedBitmap();
             transformedBitmap.BeginInit();
             transformedBitmap.Source = source;
-            
+
             RotateTransform rotateTransform = new RotateTransform(angle);
             transformedBitmap.Transform = rotateTransform;
-            
+
             transformedBitmap.EndInit();
             transformedBitmap.Freeze();
-            
+
             return transformedBitmap;
         }
 
@@ -1051,14 +1124,14 @@ aboutWindow.Content = panel;
             pageRotations.Clear();
             selectedPageIndices.Clear();
             currentPreviewPageIndex = 0;
-            
+
             int globalPageIndex = 0;
-            
+
             for (int fileIndex = 0; fileIndex < mergeFiles.Count; fileIndex++)
             {
-                string filePath = mergeFiles[fileIndex];
+                string filePath = MergeSourcePath(mergeFiles[fileIndex]);
                 string ext = Path.GetExtension(filePath).ToLower();
-                
+
                 try
                 {
                     if (ext == ".pdf")
@@ -1068,8 +1141,8 @@ aboutWindow.Content = panel;
                         {
                             for (int pageInFile = 0; pageInFile < pdfDoc.PageCount; pageInFile++)
                             {
-                                var thumbnail = RenderPdfPageToImageFromFile(filePath, pageInFile, 72); // 낮은 DPI로 썸네일
-                                
+                                var thumbnail = RenderPage(pdfDoc, pageInFile, 72, 280, 372); // 문서를 한 번만 열어 썸네일 생성
+
                                 allPages.Add(new MergePageInfo
                                 {
                                     PageIndex = globalPageIndex,
@@ -1081,7 +1154,7 @@ aboutWindow.Content = panel;
                                     RotationInfo = "",
                                     IsChecked = false
                                 });
-                                
+
                                 globalPageIndex++;
                             }
                         }
@@ -1092,10 +1165,11 @@ aboutWindow.Content = panel;
                         BitmapImage bitmap = new BitmapImage();
                         bitmap.BeginInit();
                         bitmap.UriSource = new Uri(filePath);
-                        bitmap.DecodePixelWidth = 150; // 썸네일 크기
+                        bitmap.DecodePixelWidth = 280; // 썸네일 크기
                         bitmap.CacheOption = BitmapCacheOption.OnLoad;
                         bitmap.EndInit();
-                        
+                        bitmap.Freeze();
+
                         allPages.Add(new MergePageInfo
                         {
                             PageIndex = globalPageIndex,
@@ -1107,7 +1181,7 @@ aboutWindow.Content = panel;
                             RotationInfo = "",
                             IsChecked = false
                         });
-                        
+
                         globalPageIndex++;
                     }
                 }
@@ -1116,7 +1190,7 @@ aboutWindow.Content = panel;
                     System.Diagnostics.Debug.WriteLine($"페이지 로드 오류: {ex.Message}");
                 }
             }
-            
+
             foreach (var page in allPages)
             {
                 var key = (page.FilePath, page.PageInFile);
@@ -1128,7 +1202,7 @@ aboutWindow.Content = panel;
             UpdateRotationModeLabel();
             // 썸네일 리스트 업데이트
             UpdateThumbnailList();
-            
+
             // 첫 페이지 미리보기
             if (allPages.Count > 0)
             {
@@ -1139,7 +1213,7 @@ aboutWindow.Content = panel;
         private void UpdateThumbnailList()
         {
             MergePageThumbnailList.Items.Clear();
-            
+
             foreach (var page in allPages)
             {
                 // 회전 정보 업데이트
@@ -1151,7 +1225,7 @@ aboutWindow.Content = panel;
                 {
                     page.RotationInfo = "";
                 }
-                
+
                 MergePageThumbnailList.Items.Add(page);
             }
         }
@@ -1159,10 +1233,10 @@ aboutWindow.Content = panel;
         private void ShowPreviewPage(int pageIndex)
         {
             if (pageIndex < 0 || pageIndex >= allPages.Count) return;
-            
+
             currentPreviewPageIndex = pageIndex;
             var pageInfo = allPages[pageIndex];
-            
+
             try
             {
                 using var preview = new PdfSharp.Pdf.PdfDocument();
@@ -1174,7 +1248,7 @@ aboutWindow.Content = panel;
                 stream.Position = 0;
                 using var rendered = PdfiumViewer.PdfDocument.Load(stream);
                 var size = rendered.PageSizes[0];
-                double scale = Math.Min(800.0 / size.Width, 1000.0 / size.Height);
+                double scale = Math.Min(1100.0 / size.Width, 1400.0 / size.Height);
                 using var image = rendered.Render(0, Math.Max(1, (int)(size.Width * scale)),
                     Math.Max(1, (int)(size.Height * scale)), 96, 96, false);
                 using var bitmap = new System.Drawing.Bitmap(image);
@@ -1193,7 +1267,7 @@ aboutWindow.Content = panel;
         private void MergePreview_MouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
         {
             if (allPages.Count == 0) return;
-            
+
             if (e.Delta > 0)
             {
                 // 휠 위로 - 이전 페이지
@@ -1210,7 +1284,7 @@ aboutWindow.Content = panel;
                     ShowPreviewPage(currentPreviewPageIndex + 1);
                 }
             }
-            
+
             e.Handled = true;
         }
 
@@ -1234,7 +1308,7 @@ aboutWindow.Content = panel;
                 {
                     selectedPageIndices.Remove(pageIndex);
                 }
-                
+
                 // 회전 모드 레이블 업데이트
                 UpdateRotationModeLabel();
             }
@@ -1247,7 +1321,7 @@ aboutWindow.Content = panel;
             {
                 selectedPageIndices.Add(i);
             }
-            
+
             // 체크박스 업데이트
             foreach (var item in MergePageThumbnailList.Items)
             {
@@ -1256,7 +1330,7 @@ aboutWindow.Content = panel;
                     pageInfo.IsChecked = true;
                 }
             }
-            
+
             UpdateThumbnailList();
             UpdateRotationModeLabel();
         }
@@ -1264,7 +1338,7 @@ aboutWindow.Content = panel;
         private void DeselectAllPages_Click(object sender, RoutedEventArgs e)
         {
             selectedPageIndices.Clear();
-            
+
             // 체크박스 업데이트
             foreach (var item in MergePageThumbnailList.Items)
             {
@@ -1273,7 +1347,7 @@ aboutWindow.Content = panel;
                     pageInfo.IsChecked = false;
                 }
             }
-            
+
             UpdateThumbnailList();
             UpdateRotationModeLabel();
         }
@@ -1304,6 +1378,12 @@ aboutWindow.Content = panel;
 
         private void ExecuteMerge_Click(object sender, RoutedEventArgs e)
         {
+            if (mergeConverting)
+            {
+                MessageBox.Show("문서를 PDF로 변환하는 중입니다. 잠시 후 다시 시도하세요.", "안내",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
             if (mergeFiles.Count == 0 || allPages.Count == 0)
             {
                 MessageBox.Show("병합할 파일을 추가하세요.", "안내",
@@ -1409,7 +1489,7 @@ aboutWindow.Content = panel;
                     }
                     else
                     {
-                        MessageBox.Show("PDF 파일만 선택할 수 있습니다.", "오류", 
+                        MessageBox.Show("PDF 파일만 선택할 수 있습니다.", "오류",
                             MessageBoxButton.OK, MessageBoxImage.Warning);
                     }
                 }
@@ -1454,8 +1534,8 @@ aboutWindow.Content = panel;
         {
             if (ConvertRangePanel == null) return;
 
-            ConvertRangePanel.Visibility = ConvertModeRange.IsChecked == true 
-                ? Visibility.Visible 
+            ConvertRangePanel.Visibility = ConvertModeRange.IsChecked == true
+                ? Visibility.Visible
                 : Visibility.Collapsed;
         }
 
@@ -1474,34 +1554,23 @@ aboutWindow.Content = panel;
 
                 // 썸네일 로드
                 LoadConvertThumbnails();
-                
+
                 ShowConvertPreviewPage();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"PDF 미리보기 로드 실패:\n{ex.Message}", "오류", 
+                MessageBox.Show($"PDF 미리보기 로드 실패:\n{ex.Message}", "오류",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private void LoadConvertThumbnails()
+        private int convertThumbnailVersion;
+
+        private async void LoadConvertThumbnails()
         {
+            int version = ++convertThumbnailVersion;
             ConvertPageThumbnailList.Items.Clear();
-            
-            for (int i = 0; i < convertTotalPages; i++)
-            {
-                try
-                {
-                    var thumbnail = RenderPdfPageToImageFromFile(convertPdfPath, i, 72);
-                    ConvertPageThumbnailList.Items.Add(new SimplePageInfo
-                    {
-                        PageIndex = i,
-                        Thumbnail = thumbnail,
-                        PageLabel = $"페이지 {i + 1}"
-                    });
-                }
-                catch { }
-            }
+            await LoadThumbnailsAsync(convertPdfPath, convertTotalPages, ConvertPageThumbnailList, () => version == convertThumbnailVersion);
         }
 
         private void ConvertPageThumbnail_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1516,7 +1585,7 @@ aboutWindow.Content = panel;
         private void ConvertPreview_MouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
         {
             if (convertTotalPages == 0) return;
-            
+
             if (e.Delta > 0 && convertCurrentPage > 0)
             {
                 convertCurrentPage--;
@@ -1537,7 +1606,7 @@ aboutWindow.Content = panel;
 
             try
             {
-                var image = RenderPdfPageToImageFromFile(convertPdfPath, convertCurrentPage);
+                var image = RenderPdfPageToImageFromFile(convertPdfPath, convertCurrentPage, 200);
                 if (image != null)
                 {
                     ConvertPreviewImage.Source = image;
@@ -1546,7 +1615,7 @@ aboutWindow.Content = panel;
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"미리보기 표시 오류:\n{ex.Message}", "오류", 
+                MessageBox.Show($"미리보기 표시 오류:\n{ex.Message}", "오류",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -1573,7 +1642,7 @@ aboutWindow.Content = panel;
         {
             if (string.IsNullOrEmpty(convertPdfPath))
             {
-                MessageBox.Show("PDF 파일을 먼저 선택하세요.", "오류", 
+                MessageBox.Show("PDF 파일을 먼저 선택하세요.", "오류",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -1596,10 +1665,10 @@ aboutWindow.Content = panel;
 
                 if (ConvertModeRange.IsChecked == true)
                 {
-                    if (!int.TryParse(ConvertStartPage.Text, out startPage) || 
+                    if (!int.TryParse(ConvertStartPage.Text, out startPage) ||
                         !int.TryParse(ConvertEndPage.Text, out endPage))
                     {
-                        MessageBox.Show("페이지 번호를 올바르게 입력하세요.", "오류", 
+                        MessageBox.Show("페이지 번호를 올바르게 입력하세요.", "오류",
                             MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
@@ -1607,7 +1676,7 @@ aboutWindow.Content = panel;
                     startPage--; // 0-based index
                     if (startPage < 0 || endPage > totalPages || startPage >= endPage)
                     {
-                        MessageBox.Show($"잘못된 페이지 범위입니다.\n전체 페이지 수: {totalPages}", "오류", 
+                        MessageBox.Show($"잘못된 페이지 범위입니다.\n전체 페이지 수: {totalPages}", "오류",
                             MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
@@ -1661,7 +1730,7 @@ aboutWindow.Content = panel;
                             }
                             catch (Exception pageEx)
                             {
-                                MessageBox.Show($"페이지 {i + 1} 변환 오류:\n{pageEx.Message}", "경고", 
+                                MessageBox.Show($"페이지 {i + 1} 변환 오류:\n{pageEx.Message}", "경고",
                                     MessageBoxButton.OK, MessageBoxImage.Warning);
                             }
                         }
@@ -1676,12 +1745,12 @@ aboutWindow.Content = panel;
                     inputDoc.Dispose();
 
                 ConvertStatusLabel.Text = $"완료! {pageCount}개의 이미지가 생성되었습니다.";
-                MessageBox.Show($"PDF를 이미지로 변환했습니다.\n{pageCount}개의 파일이 생성되었습니다.\n\n출력 폴더: {convertOutputFolder}", 
+                MessageBox.Show($"PDF를 이미지로 변환했습니다.\n{pageCount}개의 파일이 생성되었습니다.\n\n출력 폴더: {convertOutputFolder}",
                     "완료", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"PDF 변환 중 오류가 발생했습니다:\n{ex.Message}", "오류", 
+                MessageBox.Show($"PDF 변환 중 오류가 발생했습니다:\n{ex.Message}", "오류",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -1712,10 +1781,10 @@ aboutWindow.Content = panel;
                     int width = (int)(page.Width * dpi / 72.0);
                     int height = (int)(page.Height * dpi / 72.0);
 
-                    // 미리보기용 크기 제한 (더 작게)
-                    int maxWidth = 800;
-                    int maxHeight = 1000;
-                    
+                    // 미리보기용 크기 제한
+                    int maxWidth = 1100;
+                    int maxHeight = 1400;
+
                     if (width > maxWidth || height > maxHeight)
                     {
                         double scale = Math.Min((double)maxWidth / width, (double)maxHeight / height);
@@ -1749,8 +1818,8 @@ aboutWindow.Content = panel;
             {
                 g.Clear(System.Drawing.Color.White);
                 var font = new System.Drawing.Font("맑은 고딕", 12);
-                g.DrawString(message, font, 
-                    System.Drawing.Brushes.Red, 
+                g.DrawString(message, font,
+                    System.Drawing.Brushes.Red,
                     new System.Drawing.RectangleF(20, 20, 360, 560));
             }
             return ConvertBitmapToBitmapSource(bitmap);
@@ -1778,8 +1847,8 @@ aboutWindow.Content = panel;
             catch
             {
                 // 오류 발생 시 빈 이미지 반환
-                return BitmapSource.Create(1, 1, 96, 96, 
-                    System.Windows.Media.PixelFormats.Bgr24, null, 
+                return BitmapSource.Create(1, 1, 96, 96,
+                    System.Windows.Media.PixelFormats.Bgr24, null,
                     new byte[3], 3);
             }
         }
@@ -1787,7 +1856,7 @@ aboutWindow.Content = panel;
         private void SaveBitmapSourceToFile(BitmapSource image, string filePath, string format)
         {
             BitmapEncoder encoder;
-            
+
             switch (format.ToLower())
             {
                 case "jpg":
@@ -1849,7 +1918,7 @@ aboutWindow.Content = panel;
         public string RotationInfo { get; set; }
         public bool IsChecked { get; set; }
     }
-    
+
     // 간단한 페이지 정보 클래스 (분할/변환용)
     public class SimplePageInfo
     {

@@ -48,8 +48,9 @@ internal static class Program
         foreach (var button in Descendants(content).OfType<Button>().Where(button =>
             new[] { "추가", "위로", "아래로", "제거", "전체 삭제" }.Contains(button.Content?.ToString())))
         {
-            var point = button.TransformToAncestor(list.Parent as Visual).Transform(new Point(0, 0));
-            var listBottom = list.TransformToAncestor(list.Parent as Visual).Transform(new Point(0, list.ActualHeight)).Y;
+            // Compare in window coordinates; the list may be wrapped in decorative borders.
+            var point = button.TransformToAncestor(content).Transform(new Point(0, 0));
+            var listBottom = list.TransformToAncestor(content).Transform(new Point(0, list.ActualHeight)).Y;
             Require(point.Y >= listBottom, $"Overlapping button: {button.Content}");
             Require(button.ActualWidth >= 45 && button.ActualHeight >= 30, $"Clipped button: {button.Content}");
         }

@@ -1,20 +1,28 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
+    <PlatformTarget>x64</PlatformTarget>
+    <NoWarn>$(NoWarn);NU1701;CA1416</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <Using Include="System.IO" />
     <Compile Include="../../MergePageLayout.cs" Link="MergePageLayout.cs" />
     <Compile Include="../../PdfTextEditor.cs" Link="PdfTextEditor.cs" />
     <Compile Include="../../PdfEditRegions.cs" Link="PdfEditRegions.cs" />
     <Compile Include="../../PdfSentences.cs" Link="PdfSentences.cs" />
     <Compile Include="../../PdfTextEditor.Sentences.cs" Link="PdfTextEditor.Sentences.cs" />
     <Compile Include="../../StandardFontWidths.cs" Link="StandardFontWidths.cs" />
+    <Compile Include="../../PdfFontResolver.cs" Link="PdfFontResolver.cs" />
+    <Compile Include="../../PdfOverlay.cs" Link="PdfOverlay.cs" />
+    <Compile Include="../../PdfOcr.cs" Link="PdfOcr.cs" />
+    <Compile Include="../../PdfEditPreparation.cs" Link="PdfEditPreparation.cs" />
     <PackageReference Include="PDFsharp" Version="6.1.1" />
     <PackageReference Include="PdfiumViewer" Version="2.13.0" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
-    <None Include="../../bin/Release/net6.0-windows/win-x64/pdfium.dll" Link="pdfium.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NuGetPackageRoot)pdfiumviewer.native.x86_64.v8-xfa/2018.4.8.256/Build/x64/pdfium.dll" Link="pdfium.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -25,7 +25,7 @@ namespace PDFProcessor
         private bool editComposing;
         private bool editDirty;
         private string editSavedPath;
-        private readonly Stack<byte[]> editRedo = new();
+        private readonly Stack<EditSnapshot> editRedo = new();
         private bool editCloseApproved;
 
         private void InitializeInlineEditing()
@@ -41,21 +41,27 @@ namespace PDFProcessor
             foreach (var sentence in editSentences)
             foreach (var bounds in sentence.LineBounds)
             {
+                // OCR lines are tinted so users can see which text was recognised from the image.
+                var accent = sentence.IsOcr ? Color.FromRgb(16, 185, 129) : Color.FromRgb(37, 99, 235);
+                Brush idle = sentence.IsOcr ? new SolidColorBrush(Color.FromArgb(28, accent.R, accent.G, accent.B)) : Brushes.Transparent;
+                Brush idleBorder = sentence.IsOcr ? new SolidColorBrush(Color.FromArgb(90, accent.R, accent.G, accent.B)) : Brushes.Transparent;
+                var hover = new SolidColorBrush(Color.FromArgb(36, accent.R, accent.G, accent.B));
                 var border = new Border
                 {
                     Width = Math.Max(8, bounds.Width * editDisplayScale + 6),
                     Height = Math.Max(12, bounds.Height * editDisplayScale + 6),
-                    Background = Brushes.Transparent,
-                    BorderBrush = Brushes.Transparent,
+                    Background = idle,
+                    BorderBrush = idleBorder,
                     BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(3),
                     Cursor = Cursors.IBeam,
-                    ToolTip = "문장 전체 수정",
+                    ToolTip = sentence.IsOcr ? "OCR 인식 텍스트 · 클릭하여 수정" : "클릭하여 문장 수정",
                     Tag = sentence
                 };
                 Canvas.SetLeft(border, bounds.X * editDisplayScale - 3);
                 Canvas.SetTop(border, bounds.Y * editDisplayScale - 3);
-                border.MouseEnter += (sender, args) => border.BorderBrush = new SolidColorBrush(Color.FromRgb(96, 165, 250));
-                border.MouseLeave += (sender, args) => border.BorderBrush = Brushes.Transparent;
+                border.MouseEnter += (sender, args) => { border.BorderBrush = new SolidColorBrush(accent); border.Background = hover; };
+                border.MouseLeave += (sender, args) => { border.BorderBrush = idleBorder; border.Background = idle; };
                 border.MouseLeftButtonDown += async (sender, args) =>
                 {
                     args.Handled = true;
@@ -69,12 +75,12 @@ namespace PDFProcessor
         {
             if (editBusy) return;
             if (editActiveSentence == run && EditReplacement.Visibility == Visibility.Visible) return;
-            var anchor = run.Parts[0].Bounds;
+            var anchor = run.Bounds;
             if (!await CommitInlineEdit()) return;
             // Committing rebuilds the page and its text runs; identify the corresponding fresh run.
             if (!editSentences.Contains(run))
-                run = editSentences.OrderBy(candidate => Math.Abs(candidate.Parts[0].Bounds.X - anchor.X) +
-                    Math.Abs(candidate.Parts[0].Bounds.Y - anchor.Y)).FirstOrDefault();
+                run = editSentences.OrderBy(candidate => Math.Abs(candidate.Bounds.X - anchor.X) +
+                    Math.Abs(candidate.Bounds.Y - anchor.Y)).FirstOrDefault();
             if (run == null) return;
             var region = editSentences.FirstOrDefault(item => item == run);
             if (region == null)
@@ -93,9 +99,10 @@ namespace PDFProcessor
             Canvas.SetTop(EditReplacement, top);
             EditReplacement.Width = Math.Min(EditPageCanvas.Width - left,
                 Math.Max(160, bounds.Width * editDisplayScale + 70));
-            EditReplacement.Height = Math.Max(48, bounds.Height * editDisplayScale + run.FontSize * editDisplayScale * 1.6);
-            EditReplacement.FontSize = Math.Max(6, run.FontSize * editDisplayScale);
-            string family = Regex.Replace(run.FontName.TrimStart('/'), @"^[A-Z]{6}\+", "");
+            double fontSize = run.DisplayFontSize;
+            EditReplacement.Height = Math.Max(48, bounds.Height * editDisplayScale + fontSize * editDisplayScale * 1.6);
+            EditReplacement.FontSize = Math.Max(6, fontSize * editDisplayScale);
+            string family = run.IsOcr ? "맑은 고딕" : Regex.Replace((run.FontName ?? "").TrimStart('/'), @"^[A-Z]{6}\+", "");
             family = Regex.Replace(family, @"[-,](BoldItalic|Bold|Italic|Regular)$", "", RegexOptions.IgnoreCase);
             var installed = Fonts.SystemFontFamilies.FirstOrDefault(font => font.Source.Equals(family, StringComparison.OrdinalIgnoreCase));
             EditReplacement.FontFamily = installed ?? new FontFamily("맑은 고딕");
@@ -114,8 +121,12 @@ namespace PDFProcessor
                 int index = EditReplacement.GetCharacterIndexFromPoint(point, true);
                 if (index >= 0) EditReplacement.CaretIndex = index;
             }
-            EditFontLabel.Text = $"{family} · {run.FontSize:0.#}pt · 원본 글꼴 유지";
-            EditStatusLabel.Text = "문장 전체 편집 중 · 드래그로 선택 · Ctrl+C/V 복사·붙여넣기 · Enter 완료 · Esc 취소";
+            EditFontLabel.Text = run.IsOcr
+                ? $"OCR 인식 텍스트 · 약 {fontSize:0.#}pt · 맑은 고딕으로 다시 씀"
+                : run.IsInvisible
+                    ? $"스캔 이미지의 텍스트 레이어 · 약 {fontSize:0.#}pt"
+                    : $"{family} · {fontSize:0.#}pt · 원본 글꼴 유지 (없는 글자는 맑은 고딕)";
+            EditStatusLabel.Text = "문장 편집 중 · Enter 완료 · Shift+Enter 줄바꿈 · Esc 취소";
         }
 
         private async Task<bool> CommitInlineEdit()
@@ -131,18 +142,29 @@ namespace PDFProcessor
             editCommitting = true;
             try
             {
-                byte[] before = editCurrentBytes;
+                var before = new EditSnapshot(editCurrentBytes, editOcrHidden);
                 int page = editPageIndex;
-                double zoom = EditZoomValue;
-                string replacement = EditReplacement.Text;
-                var sourceRuns = pdfEditor.GetRuns(page).ToArray();
-                bool success = await PrepareEditAsync(() => PdfEditPreparation.Build(before, page, zoom, run, sourceRuns, replacement), () =>
+                var request = new PdfEditRequest
+                {
+                    Sentence = run,
+                    SourceRuns = run.IsOcr ? Array.Empty<PdfTextRun>() : pdfEditor.GetRuns(page).ToArray(),
+                    Replacement = EditReplacement.Text,
+                    Obstacles = editSentences.Where(sentence => sentence != run).SelectMany(sentence => sentence.LineBounds).ToList(),
+                    PageSize = editPageSize,
+                };
+                var hidden = new HashSet<string>(editOcrHidden);
+                if (run.IsOcr) hidden.Add(run.Ocr.Id);
+                bool success = await PrepareEditAsync(PageBuilder(before.Bytes, page, hidden, request, OcrMode.None), () =>
                 {
                     editUndo.Push(before);
                     editRedo.Clear();
+                    editOcrHidden = hidden;
                     editDirty = true;
                 });
-                if (success) EditStatusLabel.Text = "수정됨 · 다른 문장을 클릭해 계속 편집 · Ctrl+S 저장";
+                if (success)
+                    EditStatusLabel.Text = lastEditNotice == null
+                        ? "수정됨 · 다른 문장을 클릭해 계속 편집 · Ctrl+S 저장"
+                        : $"수정됨 · {lastEditNotice} · Ctrl+S 저장";
                 return success;
             }
             catch (Exception ex)
@@ -168,6 +190,14 @@ namespace PDFProcessor
             {
                 CancelInlineEdit();
                 EditStatusLabel.Text = "문장 수정을 취소했습니다.";
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                // Explicit line break inside the replacement text.
+                int caret = EditReplacement.SelectionStart;
+                EditReplacement.SelectedText = "\n";
+                EditReplacement.CaretIndex = caret + 1;
                 e.Handled = true;
             }
             else if (e.Key == Key.Enter)
@@ -202,7 +232,15 @@ namespace PDFProcessor
 
         private void EditWorkspace_KeyDown(object sender, KeyEventArgs e)
         {
-            if (editBusy || editComposing || Keyboard.Modifiers != ModifierKeys.Control) return;
+            if (editBusy || editComposing) return;
+            if (Keyboard.Modifiers == ModifierKeys.None && (e.Key == Key.PageDown || e.Key == Key.PageUp) &&
+                !EditReplacement.IsKeyboardFocusWithin && pdfEditor != null)
+            {
+                e.Handled = true;
+                _ = ChangeEditPage(e.Key == Key.PageDown ? 1 : -1);
+                return;
+            }
+            if (Keyboard.Modifiers != ModifierKeys.Control) return;
             switch (e.Key)
             {
                 case Key.S: SaveEditedPdf_Click(sender, e); e.Handled = true; break;
@@ -219,13 +257,13 @@ namespace PDFProcessor
         private async void RedoPdfEdit_Click(object sender, RoutedEventArgs e)
         {
             if (editBusy || !await CommitInlineEdit() || editRedo.Count == 0) return;
-            byte[] target = editRedo.Peek(), before = editCurrentBytes;
-            int page = editPageIndex;
-            double zoom = EditZoomValue;
-            await PrepareEditAsync(() => PdfEditPreparation.Build(target, page, zoom), () =>
+            var target = editRedo.Peek();
+            var before = new EditSnapshot(editCurrentBytes, editOcrHidden);
+            await PrepareEditAsync(PageBuilder(target.Bytes, editPageIndex, target.HiddenOcr, mode: OcrMode.None), () =>
             {
                 editRedo.Pop();
                 editUndo.Push(before);
+                editOcrHidden = target.HiddenOcr;
                 editDirty = true;
             });
         }

@@ -21,15 +21,49 @@ namespace PDFProcessor
     internal sealed class PdfSentence
     {
         internal readonly List<PdfSentencePart> Parts = new();
-        public string Text => string.Concat(Parts.Select(part => (part.SpaceBefore ? " " : "") + part.Text));
-        public string FontName => Parts[0].Run.FontName;
-        public double FontSize => Parts[0].Run.FontSize;
-        internal RectangleF Bounds => Parts.Select(part => part.Bounds).Aggregate(RectangleF.Union);
-        internal List<RectangleF> LineBounds => GetSegments().Select(segment => segment.Bounds).ToList();
+        /// <summary>Set when the text was recognised from the page image instead of read from the content stream.</summary>
+        internal OcrLine Ocr;
+        internal bool IsOcr => Ocr != null;
+        /// <summary>True when every glyph is drawn invisibly (typically an OCR text layer over a scanned image).</summary>
+        internal bool IsInvisible => !IsOcr && Parts.All(part => part.Run.IsInvisible);
+
+        public string Text => IsOcr ? Ocr.Text : string.Concat(Parts.Select(part => (part.SpaceBefore ? " " : "") + part.Text));
+        public string FontName => IsOcr ? "OCR" : Parts[0].Run.FontName;
+        public double FontSize => IsOcr ? Ocr.FontSize : Parts[0].Run.FontSize;
+        /// <summary>Shown in the sentence list.</summary>
+        public string Label => IsOcr ? "[OCR] " + Ocr.Text : Text;
+        internal RectangleF Bounds => IsOcr ? Ocr.Bounds : Parts.Select(part => part.Bounds).Aggregate(RectangleF.Union);
+        internal List<RectangleF> LineBounds => IsOcr ? new List<RectangleF> { Ocr.Bounds } : GetSegments().Select(segment => segment.Bounds).ToList();
+
+        /// <summary>
+        /// Visible font size in points. The Tf size is used when it agrees with the rendered glyph height;
+        /// otherwise (text matrix scaling such as "1 Tf" with a scaled Tm) the size is estimated from the glyph boxes.
+        /// </summary>
+        internal double DisplayFontSize
+        {
+            get
+            {
+                if (IsOcr) return Ocr.FontSize;
+                bool sideways = Angle == 90 || Angle == 270;
+                // Line thickness across the reading direction.
+                var heights = LineBounds.Select(bounds => (double)(sideways ? bounds.Width : bounds.Height))
+                    .Where(height => height > 0).OrderBy(height => height).ToList();
+                double height = heights.Count == 0 ? 0 : heights[heights.Count / 2];
+                double effective = Parts[0].Run.EffectiveFontSize;
+                if (effective > 0.5 && (height == 0 || height / effective >= 0.3 && height / effective <= 2.2)) return effective;
+                if (height == 0) return Math.Max(1, FontSize);
+                double ratio = height / Math.Max(0.01, FontSize);
+                return ratio >= 0.45 && ratio <= 1.6 ? FontSize : Math.Max(4, height / 0.9);
+            }
+        }
+
+        /// <summary>Reading direction on screen (counter-clockwise degrees, multiple of 90).</summary>
+        internal int Angle => IsOcr ? 0 : Parts[0].Run.VisualAngle;
 
         internal List<PdfSentenceSegment> GetSegments()
         {
             var result = new List<PdfSentenceSegment>();
+            if (IsOcr) return result;
             foreach (var part in Parts)
             {
                 var last = result.LastOrDefault();
@@ -111,8 +145,11 @@ namespace PDFProcessor
             }
             var sentences = new List<PdfSentence>();
             PdfSentence current = null;
+            float? cellLeft = null; // Set when the current sentence started after a wide gap (a table cell).
             RectangleF previousLine = RectangleF.Empty;
-            foreach (var line in lines.OrderBy(parts => parts.Min(part => part.Bounds.Top)))
+            var orderedLines = lines.OrderBy(parts => parts.Min(part => part.Bounds.Top)).ToList();
+            string previousLineText = "";
+            foreach (var line in orderedLines)
             {
                 line.Sort((first, second) => first.Bounds.Left.CompareTo(second.Bounds.Left));
                 var lineBox = line.Select(part => part.Bounds).Aggregate(RectangleF.Union);
@@ -121,12 +158,28 @@ namespace PDFProcessor
                     Math.Abs(lineBox.Left - previousLine.Left) > Math.Max(36, lineBox.Height * 2) ||
                     Math.Max(lineBox.Height, previousLine.Height) / Math.Max(1, Math.Min(lineBox.Height, previousLine.Height)) > 1.5))
                     current = null;
+                // A new list item ("1. …", "- …") or consecutive form fields ("수 신 : …") never continue the
+                // previous line's sentence.
+                string lineText = string.Join(" ", line.Select(part => part.Text));
+                if (current != null && (StartsListItem(lineText) || IsFormField(lineText) && IsFormField(previousLineText)))
+                    current = null;
+                previousLineText = lineText;
                 foreach (var part in line)
                 {
                     var previous = current?.Parts.LastOrDefault();
-                    if (previous != null && SameLine(previous.Bounds, part.Bounds) &&
-                        part.Bounds.Left - previous.Bounds.Right > Math.Max(28, part.Bounds.Height * 2)) current = null;
-                    if (current == null) { current = new PdfSentence(); sentences.Add(current); }
+                    bool cellGap = previous != null && SameLine(previous.Bounds, part.Bounds) &&
+                        part.Bounds.Left - previous.Bounds.Right > Math.Max(28, part.Bounds.Height * 2);
+                    if (cellGap) current = null;
+                    // A table cell only continues on the next line in its own column, never into the next row's first cell.
+                    if (previous != null && !SameLine(previous.Bounds, part.Bounds) && cellLeft.HasValue &&
+                        Math.Abs(part.Bounds.Left - cellLeft.Value) > Math.Max(36, part.Bounds.Height * 2))
+                        current = null;
+                    if (current == null)
+                    {
+                        current = new PdfSentence();
+                        sentences.Add(current);
+                        cellLeft = cellGap ? part.Bounds.Left : null;
+                    }
                     previous = current.Parts.LastOrDefault();
                     if (previous != null)
                         part.SpaceBefore = !SameLine(previous.Bounds, part.Bounds) ||
@@ -142,6 +195,8 @@ namespace PDFProcessor
 
         private static bool EndsSentence(string text)
         {
+            // A lone list number such as "1." or "12." starts an item rather than ending a sentence.
+            if (Regex.IsMatch(text.Trim(), @"^\d{1,3}\.$")) return false;
             int end = text.Length - 1;
             while (end >= 0 && "\"'”’)]".Contains(text[end])) end--;
             return end >= 0 && ".!?。！？".Contains(text[end]);
@@ -151,8 +206,30 @@ namespace PDFProcessor
             char value = text[index];
             if (!".!?。！？".Contains(value)) return false;
             if (value == '.' && index > 0 && index + 1 < text.Length && char.IsDigit(text[index - 1]) && char.IsDigit(text[index + 1])) return false;
+            if (value == '.' && IsListNumber(text, index)) return false;
             // A dot within a token is usually a URL, email address or abbreviation.
             return value != '.' || index + 1 == text.Length || char.IsWhiteSpace(text[index + 1]) || "\"'”’)]!?".Contains(text[index + 1]);
+        }
+
+        private static bool StartsListItem(string text) =>
+            Regex.IsMatch(text, @"^\s*(\d{1,3}[.)](\s|$)|\(\d{1,3}\)|[-•·※○●◎▶►■□◦*]\s|[가-힣][.)]\s)");
+
+        // "수    신 : …", "T E L : …", "견적일자 : …": a short label followed by a colon near the start of the line.
+        private static bool IsFormField(string text)
+        {
+            int colon = text.IndexOfAny(new[] { ':', '：' });
+            return colon > 0 && colon <= 14 && text.Substring(0, colon).Trim().Length > 0 && !text.Substring(0, colon).Contains("://");
+        }
+
+        // "1. 납기", "2) …" style markers: one to three digits that start the text (or follow only whitespace).
+        private static bool IsListNumber(string text, int dot)
+        {
+            int start = dot;
+            while (start > 0 && char.IsDigit(text[start - 1])) start--;
+            int digits = dot - start;
+            if (digits < 1 || digits > 3) return false;
+            for (int index = 0; index < start; index++) if (!char.IsWhiteSpace(text[index])) return false;
+            return true;
         }
     }
 }

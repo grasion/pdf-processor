@@ -1,6 +1,6 @@
 # PDF 통합 처리기
 
-PDF 파일을 분할, 병합, 이미지로 변환하고 문장 단위로 수정하는 Windows 프로그램입니다. 현재 릴리스는 **v1.0.9**입니다.
+PDF 파일을 분할, 병합, 이미지로 변환하고 문장 단위로 수정하는 Windows 프로그램입니다. 현재 릴리스는 **v1.1.0**입니다.
 
 ## 주요 기능
 
@@ -11,7 +11,10 @@ PDF 파일을 분할, 병합, 이미지로 변환하고 문장 단위로 수정�
 
 ### 2. PDF 병합
 - 여러 PDF 파일을 하나로 병합
-- 이미지 파일(PNG, JPG, BMP, TIFF)도 PDF로 변환하여 병합
+- 이미지 파일(PNG, JPG, BMP, TIFF, GIF)도 PDF로 변환하여 병합
+- 워드(DOC/DOCX/RTF), 엑셀(XLS/XLSX/CSV, 모든 시트), 파워포인트(PPT/PPTX)도 PDF로 변환하여 함께 병합
+  - 설치된 Microsoft Office로 변환하며, Office가 없으면 LibreOffice를 사용 (둘 다 없으면 안내)
+  - 변환은 파일을 추가할 때 백그라운드에서 진행되고, 같은 파일은 다시 변환하지 않음
 - 파일 순서 조정 가능
 - 페이지 크기 및 방향 설정
 
@@ -29,9 +32,19 @@ PDF 파일을 분할, 병합, 이미지로 변환하고 문장 단위로 수정�
 
 ### 5. PDF 문장 수정
 - 문장을 클릭해 여러 텍스트 조각과 줄을 한 번에 편집
-- 원본 글꼴과 줄 위치 유지, 되돌리기·다시 실행·확대·저장
-- 기존 문장 영역을 넘는 입력과 원본 글꼴에 없는 문자는 제한
-- PDF 작업은 백그라운드 처리하며 진행 상태 표시
+- 가능하면 원본 글꼴로 그 자리에서 수정하고, 원본 글꼴에 없는 글자(서브셋 글꼴의 한글 등)나 더 긴 문장은
+  원래 위치·크기·색상·방향을 맞춰 맑은 고딕으로 다시 씀 (긴 문장은 글자 크기를 조금 줄이거나 줄을 추가)
+- 여러 줄 문장은 바뀌지 않은 줄의 위치를 그대로 유지, Shift+Enter로 줄바꿈 입력
+- 회전된 페이지(90°/180°/270°)와 스캔 PDF의 투명 텍스트 레이어도 수정 가능
+- 되돌리기·다시 실행·확대·저장, PDF 작업은 백그라운드 처리하며 진행 상태 표시
+- 마우스 휠: 페이지 끝에서 계속 굴리면 다음/이전 페이지로 이동 · Ctrl+휠 확대/축소 · PageUp/PageDown 페이지 이동
+
+### 6. 스캔(이미지) PDF OCR
+- Windows 10/11 내장 OCR(한국어)로 이미지 PDF의 글자를 인식 — 별도 다운로드 불필요
+- 텍스트가 없는 페이지는 자동 OCR(끌 수 있음), 'OCR 인식' 버튼으로 언제든 다시 인식
+- 인식된 줄(초록색 표시)을 클릭해 수정하면 배경색·글자색을 맞춰 실제 텍스트로 다시 씀
+- 'OCR 텍스트 복사'로 페이지 텍스트를 클립보드에 복사
+- 한국어 OCR이 없으면: 설정 → 시간 및 언어 → 언어 → 한국어 → 언어 옵션 → '광학 문자 인식' 설치
 
 [최신 릴리스 다운로드](https://github.com/grasion/pdf-processor/releases/latest)
 
@@ -99,7 +112,15 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 - **자동 DLL 추출**: 첫 실행 시 필요한 네이티브 라이브러리를 자동으로 추출
 - **이식성**: 파일 하나만 복사하면 어디서든 실행 가능
 
+#### 테스트
+```bash
+dotnet run -c Release --project tests/MergeLayoutChecks            # 병합 레이아웃 + 편집 엔진
+dotnet build PDFProcessor.csproj -c Release -o out                 # UI 테스트용 앱 빌드
+dotnet run -c Release --project tests/UiChecks -- out <병합용.pdf> <수정용.pdf> [--sentences|--affected]
+```
+
 #### 사용된 라이브러리
+- **Windows.Media.Ocr** (Windows 내장): 스캔 PDF 글자 인식
 - **PDFsharp**: PDF 분할 및 병합
 - **PdfiumViewer**: PDF 렌더링 및 이미지 변환
 - **PdfiumViewer.Native.x86_64.v8-xfa**: 네이티브 PDF 렌더링 엔진 (내장)
